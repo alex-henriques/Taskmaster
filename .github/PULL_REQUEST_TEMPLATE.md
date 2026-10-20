@@ -8,6 +8,6 @@ Closes #
 - [ ] By hand: <!-- what you ran, and what you saw -->
 
 ### Before merging
-- [ ] `Closes #N` is at the top, so the merge closes the issue and unblocks the issues that wait for it.
+- [ ] One `Closes #N` line for each issue this PR finishes, so the merge closes them and unblocks the issues that wait for them.
 - [ ] If this changes `docs/CONTRACTS.md`, the other person agreed before this PR.
 - [ ] Bonus PRs only: the whole of `demo/DEFENSE.md` passes again on the VM.

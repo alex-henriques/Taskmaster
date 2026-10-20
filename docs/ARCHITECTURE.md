@@ -100,6 +100,7 @@ Taskmaster/
 ├── author                       (exists)
 ├── Makefile                     (exists, empty)
 ├── README.md                    (exists, empty)
+├── CONTRIBUTING.md              (new) how we work together: branches, PRs, reviews
 ├── requirements.txt             (new) PyYAML
 ├── .gitignore                   (new)
 ├── .github/
