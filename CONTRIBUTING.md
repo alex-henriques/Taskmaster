@@ -2,7 +2,7 @@
 
 How the two of us work on this repo. The design is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). What Person A (core) and Person B (interface) agree on is in [docs/CONTRACTS.md](docs/CONTRACTS.md).
 
-Each of us works on their own branch: `viceda-s` on `morcão`, and `alex-henriques` on `morcona`.
+Each of us works on their own branch: `viceda-s` (core) on `morcão`, and `alex-henriques` (interface) on `morcona`.
 
 ## Rules
 
