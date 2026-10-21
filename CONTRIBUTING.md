@@ -10,7 +10,7 @@ Each of us works on their own branch: `viceda-s` (core) on `morcão`, and `alex-
 2. Work reaches `main` through a pull request from your own branch. Its description has one `Closes #N` line for each issue it finishes, so the merge closes them and unblocks the issues that wait for them.
 3. Only take an issue whose blockers are all closed, and merge `main` into your branch first to get their code. The bonus (#14 to #19) only starts once #13, the defense rehearsal, is closed: the bonus only counts if the mandatory part is flawless.
 4. `docs/CONTRACTS.md` only changes when both of us agree. Talk first, then change it in the same PR as the code.
-5. Python 3.9 or newer, with the standard library plus PyYAML and nothing else. Tests use `unittest`. Every module starts with `from __future__ import annotations`.
+5. Python 3.10 or newer, with the standard library plus PyYAML and nothing else. Tests use `unittest`. Every module starts with `from __future__ import annotations`.
 6. In the defense, each of us must explain the other's code. Review to understand it, not only to approve it.
 7. No AI `Co-Authored-By` trailers in commit messages.
 
@@ -18,7 +18,7 @@ Each of us works on their own branch: `viceda-s` (core) on `morcão`, and `alex-
 
 ```bash
 git clone git@github.com:alex-henriques/Taskmaster.git && cd Taskmaster
-python3 --version          # 3.9 or newer
+python3 --version          # 3.10 or newer
 make install               # .venv with PyYAML: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 gh auth login              # GitHub CLI, for issues and pull requests from the terminal
 ```

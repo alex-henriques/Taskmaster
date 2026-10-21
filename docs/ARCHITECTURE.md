@@ -32,9 +32,9 @@ We are building a process supervisor in the spirit of `supervisord`, in Python. 
 - A bonus feature breaking the mandatory part.
 
 **Constraints**
-- **Python ≥ 3.9**, because `Popen` only accepts `umask`, `user`, `group` and `extra_groups` from 3.9 on. Check the version on the VM.
-  - Every module starts with `from __future__ import annotations`, so that `str | None` works on 3.9.
-  - No `match` statements, which need 3.10.
+- **Python ≥ 3.10.** `Popen` needs 3.9 or newer for `umask`, `user`, `group` and `extra_groups`, so 3.10 covers it. Check the version on the VM.
+  - Every module starts with `from __future__ import annotations`, a project convention that keeps annotations lazy and uniform.
+  - `match` statements are allowed (they need 3.10).
 - **Libraries:** the standard library plus PyYAML only. PyYAML is allowed because it parses the config.
   - Tests use `unittest`, not `pytest`, to stay clear of the external-library rule.
 - **Linux VM.** The mandatory part runs without root. The privilege bonus needs root.
