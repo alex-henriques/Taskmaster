@@ -20,7 +20,7 @@ your programs are doing and to start, stop or restart them. It is inspired by
 
 ## Instructions
 
-You need Linux, Python 3.9 or newer, and `make`. On Debian or Ubuntu, Python
+You need Linux, Python 3.10 or newer, and `make`. On Debian or Ubuntu, Python
 also needs a package to create virtual environments:
 `sudo apt install python3-venv`.
 

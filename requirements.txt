@@ -1,7 +1,8 @@
-# Runtime dependencies for the taskmaster (run via `make install`).
+# Dependencies for the taskmaster (run via `make install`).
 # Pinned so a rebuild months from now can't silently pull a breaking release.
 #
 # Check these are still current before you commit them the first time:
 #   pip index versions <dependency>
 
 PyYAML==6.0.3
+ruff==0.17.1

@@ -1,0 +1,2 @@
+#!/bin/sh
+.venv/bin/ruff check . && .venv/bin/ruff format --check .
