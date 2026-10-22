@@ -53,7 +53,7 @@ Every `Backend` method (section 5.2) returns a dict like these. In the bonus, th
 
 ```jsonc
 // status: one row per instance, sorted by name
-+{"ok": true, "data": [{"name": "nginx", "state": "RUNNING", "pid": 4242, "since": now - 62, "exit": null, "error": null}]}
+{"ok": true, "data": [{"name": "nginx", "state": "RUNNING", "pid": 4242, "since": now - 62, "exit": null, "error": null}]}
 // start / stop / restart: one result per instance; the top-level ok is true only if all are ok
 {"ok": false, "data": [{"name": "nginx", "ok": true, "msg": "starting"},
                        {"name": "vogsphere_00", "ok": false, "error": "ALREADY_STARTED", "msg": "already started"}]}
@@ -68,7 +68,7 @@ Every `Backend` method (section 5.2) returns a dict like these. In the bonus, th
 **`status` fields**
 - `pid` is `null` when the process is not alive.
 - `since` is the time of the last state change (`time.time()`). Uptime is computed from it.
-+  The example above is 62 seconds before the reply, so the uptime is `0:01:02`, as in the table.
+  The example above is 62 seconds before the reply, so the uptime is `0:01:02`, as in the table.
 - `exit` is the last exit: a code, a signal name such as `"SIGKILL"`, or `null`.
 - `error` is the error message from `Popen`, or `null`.
 

@@ -95,47 +95,51 @@ An invalid config, or another taskmaster already running, prints the error on st
 
 ## 4. Repository layout
 
+A file marked with an issue (T07, T16…) does not exist yet: that issue creates it.
+
 ```
 Taskmaster/
-├── author                       (exists)
-├── Makefile                     (exists, empty)
-├── README.md                    (exists, empty)
-├── CONTRIBUTING.md              (new) how we work together: branches, PRs, reviews
-├── requirements.txt             (new) PyYAML
-├── .gitignore                   (new)
+├── Makefile                     install, run, test, clean
+├── README.md
+├── CONTRIBUTING.md              how we work together: branches, PRs, reviews
+├── requirements.txt             PyYAML; ruff for the pre-commit hook (never imported)
+├── ruff.toml                    lint and format settings
+├── .gitignore
+├── .githooks/pre-commit         ruff check and ruff format --check; `make install` turns it on
 ├── .github/
-│   ├── pull_request_template.md (rename of pr_template.md)
-│   └── workflows/ci.yml         (exists, empty)
+│   ├── ISSUE_TEMPLATE.md
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── workflows/ci.yml         unittest on Python 3.10 and 3.14
 ├── docs/
-│   ├── ARCHITECTURE.md          (new) this file
-│   └── CONTRACTS.md             (exists, empty)
+│   ├── ARCHITECTURE.md          this file
+│   └── CONTRACTS.md
 ├── taskmaster/
-│   ├── __init__.py              (new)
+│   ├── __init__.py
 │   ├── main.py                  B   program 1: core and shell in one process
 │   ├── api.py                   B   Api: the thread-safe backend over the core
-│   ├── protocol.py              (new) A+B   error codes, ok() and err(), Backend; bonus: wire format, attach types
+│   ├── protocol.py              A+B   error codes, ok() and err(), Backend; bonus: wire format, attach types
 │   ├── core/                    A
-│   │   ├── __init__.py          (new)
+│   │   ├── __init__.py
 │   │   ├── config.py            load and validate the YAML into ProgramConfig
 │   │   ├── process.py           one instance: Popen, state machine (bonus: pty)
 │   │   ├── supervisor.py        instance table, commands, reap, deadlines, shutdown
 │   │   ├── reload.py            the diff between two configs
-│   │   ├── loop.py              (new) event loop, signals, call queue
+│   │   ├── loop.py              (T07) event loop, signals, call queue
 │   │   └── logger.py            the log file (bonus: syslog)
 │   ├── shell/                   B
-│   │   ├── __init__.py          (new)
+│   │   ├── __init__.py
 │   │   ├── commands.py          command table, parsing, dispatch to the backend
 │   │   ├── render.py            status table and messages
 │   │   ├── repl.py              readline loop, completion, Ctrl-C and Ctrl-D
-│   │   └── attach.py            (new, bonus) raw-mode attach client
-│   ├── server.py                (new, bonus) B   socket server, runs inside the core loop
-│   ├── client.py                (new, bonus) B   RemoteApi: the same methods over the socket
-│   ├── daemon.py                (new, bonus) B   program 2
-│   └── ctl.py                   (new, bonus) B   program 3
-├── tests/                       unittest; the placeholder file with a `*` in its name is deleted
-│   ├── __init__.py              (new)
-│   └── fakes.py                 (new) FakeBackend
-└── demo/                        (new) test programs, demo configs, DEFENSE.md
+│   │   └── attach.py            (T19, bonus) raw-mode attach client
+│   ├── server.py                (T16, bonus) B   socket server, runs inside the core loop
+│   ├── client.py                (T17, bonus) B   RemoteApi: the same methods over the socket
+│   ├── daemon.py                (T17, bonus) B   program 2
+│   └── ctl.py                   (T17, bonus) B   program 3
+├── tests/                       unittest, one test_<module>.py per module
+│   ├── __init__.py
+│   └── fakes.py                 FakeBackend
+└── demo/                        (T11) test programs and demo configs; DEFENSE.md (T13)
 ```
 
 ## 5. Concurrency model

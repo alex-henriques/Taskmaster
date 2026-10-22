@@ -10,7 +10,7 @@ Each of us works on their own branch: `viceda-s` (core) on `morcão`, and `alex-
 2. Work reaches `main` through a pull request from your own branch. Its description has one `Closes #N` line for each issue it finishes, so the merge closes them and unblocks the issues that wait for them.
 3. Only take an issue whose blockers are all closed, and merge `main` into your branch first to get their code. The bonus (#14 to #19) only starts once #13, the defense rehearsal, is closed: the bonus only counts if the mandatory part is flawless.
 4. `docs/CONTRACTS.md` only changes when both of us agree. Talk first, then change it in the same PR as the code.
-5. Python 3.10 or newer, with the standard library plus PyYAML and nothing else. Tests use `unittest`. Every module starts with `from __future__ import annotations`.
+5. Python 3.10 or newer, with the standard library plus PyYAML and nothing else (ruff, in `requirements.txt`, is only a tool for the commit hook and is never imported). Tests use `unittest`. Every module starts with `from __future__ import annotations`.
 6. In the defense, each of us must explain the other's code. Review to understand it, not only to approve it.
 7. No AI `Co-Authored-By` trailers in commit messages.
 
@@ -19,7 +19,7 @@ Each of us works on their own branch: `viceda-s` (core) on `morcão`, and `alex-
 ```bash
 git clone git@github.com:alex-henriques/Taskmaster.git && cd Taskmaster
 python3 --version          # 3.10 or newer
-make install               # if the hook blocks use this command: .venv/bin/ruff check --fix . && .venv/bin/ruff format . 
+make install               # .venv with PyYAML and ruff, and turns on the pre-commit hook
 gh auth login              # GitHub CLI, for issues and pull requests from the terminal
 ```
 
@@ -55,13 +55,16 @@ Do this before you start an issue, and each time a pull request from the other p
 ### 3. Work, test, commit
 
 ```bash
-make test                                         # every test (python3 -m unittest)
-python3 -m unittest tests.test_process -v         # one file
-python3 -m unittest tests.test_process.ProcessTest.test_backoff   # one test (example names)
-make run CONFIG=demo/v1.yaml                      # the program (python3 -m taskmaster.main demo/v1.yaml)
-git add -p                                        # choose what goes into the commit
+make test                                                   # every test
+.venv/bin/python3 -m unittest tests.test_process -v         # one file
+.venv/bin/python3 -m unittest tests.test_process.ProcessTest.test_backoff   # one test (example names)
+make run CONFIG=demo/v1.yaml                                # the program
+.venv/bin/ruff check --fix . && .venv/bin/ruff format .     # when the pre-commit hook blocks a commit
+git add -p                                                  # choose what goes into the commit
 git commit -m "feat(core): spawn programs with Popen (#5)"
 ```
+
+Use `.venv/bin/python3`, not the system `python3`: PyYAML is only installed in `.venv`. The pre-commit hook runs `ruff check` and `ruff format --check`. CI only runs the tests, so the hook is the only lint check.
 
 Commit messages follow `type(scope): what changed`.
 - Types: `feat`, `fix`, `test`, `docs`, `refactor` and `chore`.
