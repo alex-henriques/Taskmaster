@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from typing import Protocol
 
 BAD_REQUEST = "BAD_REQUEST"
@@ -11,8 +12,10 @@ BAD_CONFIG = "BAD_CONFIG"
 NOT_TTY = "NOT_TTY"
 INTERNAL = "INTERNAL"
 
+
 class BackendError(Exception):
     """The backend is gone: the core stopped, or the connection was lost."""
+
 
 def ok(data=None, msg: str | None = None) -> dict:
     reply: dict = {"ok": True}
@@ -22,8 +25,10 @@ def ok(data=None, msg: str | None = None) -> dict:
         reply["msg"] = msg
     return reply
 
+
 def err(code: str, msg: str) -> dict:
     return {"ok": False, "error": code, "msg": msg}
+
 
 class Backend(Protocol):
     def status(self, names: list[str]) -> dict: ...
