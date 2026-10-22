@@ -10,7 +10,7 @@ Taskmaster: a 42-school process supervisor in the spirit of `supervisord`, in Py
 - `docs/CONTRACTS.md`: what core and shell agreed on: commands, the state × command table, reply shapes, error codes, config keys, `Backend`/`Api` signatures.
 - If a GitHub issue and these docs disagree, the docs win. GitHub issue `#N` is task `TNN` (T05 = #5).
 
-Most modules are still empty stubs. Only `taskmaster/protocol.py` and `tests/fakes.py` have real code so far.
+Modules start as empty stubs and get filled issue by issue. Read a module before assuming it is a stub, and don't rewrite working code unless the issue or the docs require it.
 
 ## Commands
 
@@ -34,6 +34,7 @@ CI (`.github/workflows/ci.yml`) runs only `python3 -m unittest -v` on Python 3.1
 - **Python ≥ 3.10**, because the school machines have 3.10.12. Nothing from 3.11+. `match` is allowed.
 - **Standard library + PyYAML only.** Tests use `unittest`, never `pytest`.
 - Every module starts with `from __future__ import annotations`.
+- No threads, locks or sockets beyond the ones in ARCHITECTURE §5 (and §11.2 for the bonus).
 - Mandatory issues carry no bonus code: `user`, `tty`, `attach`, the socket, `server.py`/`client.py`/`daemon.py`/`ctl.py` arrive only with T14–T19, and bonus work starts only after #13 is closed.
 
 ## Architecture in one screen
@@ -60,7 +61,7 @@ Design decisions that were tested and must not be "simplified" away (ARCHITECTUR
 
 - Never push to `main`. Each person works on a long-lived branch (`morcão` for viceda-s, `morcona` for alex-henriques) and opens a PR into `main` with one `Closes #N` line per finished issue; the other person reviews.
 - Merge with `gh pr merge --merge`, never squash, never `--delete-branch`. Update with `git merge origin/main`, never rebase a pushed branch.
-- `docs/CONTRACTS.md` changes only after both agree, in the same PR as the code, flagged "contract change" in the PR body.
+- `docs/CONTRACTS.md`, and `protocol.py` (its code form), change only after both agree, in the same PR as the code, flagged "contract change" in the PR body.
 - Commit messages: `type(scope): what changed (#N)`. Types: `feat fix test docs refactor chore`. Scopes: `core shell docs ci`.
 - No AI `Co-Authored-By` trailers in commits, and no "Generated with Claude Code" line in PR bodies.
 - Both people must be able to explain every line in the defense, the other person's code included.
