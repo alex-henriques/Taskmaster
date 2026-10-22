@@ -8,6 +8,7 @@ install: $(VENV)
 $(VENV): requirements.txt
 		python3 -m venv $(VENV)
 		$(PYTHON) -m pip install -r requirements.txt
+		-git config core.hooksPath .githooks
 		touch $(VENV)
 
 run: $(VENV)

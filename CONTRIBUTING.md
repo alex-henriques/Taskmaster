@@ -19,7 +19,7 @@ Each of us works on their own branch: `viceda-s` (core) on `morcão`, and `alex-
 ```bash
 git clone git@github.com:alex-henriques/Taskmaster.git && cd Taskmaster
 python3 --version          # 3.10 or newer
-make install               # .venv with PyYAML: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+make install               # if the hook blocks use this command: .venv/bin/ruff check --fix . && .venv/bin/ruff format . 
 gh auth login              # GitHub CLI, for issues and pull requests from the terminal
 ```
 
