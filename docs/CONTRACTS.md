@@ -53,7 +53,7 @@ Every `Backend` method (section 5.2) returns a dict like these. In the bonus, th
 
 ```jsonc
 // status: one row per instance, sorted by name
-{"ok": true, "data": [{"name": "nginx", "state": "RUNNING", "pid": 4242, "since": 1760968985.2, "exit": null, "error": null}]}
++{"ok": true, "data": [{"name": "nginx", "state": "RUNNING", "pid": 4242, "since": now - 62, "exit": null, "error": null}]}
 // start / stop / restart: one result per instance; the top-level ok is true only if all are ok
 {"ok": false, "data": [{"name": "nginx", "ok": true, "msg": "starting"},
                        {"name": "vogsphere_00", "ok": false, "error": "ALREADY_STARTED", "msg": "already started"}]}
@@ -68,6 +68,7 @@ Every `Backend` method (section 5.2) returns a dict like these. In the bonus, th
 **`status` fields**
 - `pid` is `null` when the process is not alive.
 - `since` is the time of the last state change (`time.time()`). Uptime is computed from it.
++  The example above is 62 seconds before the reply, so the uptime is `0:01:02`, as in the table.
 - `exit` is the last exit: a code, a signal name such as `"SIGKILL"`, or `null`.
 - `error` is the error message from `Popen`, or `null`.
 
@@ -129,7 +130,7 @@ Each program becomes a `ProgramConfig` ([ARCHITECTURE §10](ARCHITECTURE.md#10-c
 
 ### 5.1 protocol.py
 
-`taskmaster/protocol.py` imports nothing from the package, so everybody can import it without cycles. It starts with the error codes and the reply helpers; the bonus adds the wire format (section 6) and the attach types (section 7).
+`taskmaster/protocol.py` imports nothing from the package, so everybody can import it without cycles. It also holds the Backend protocol of §5.2; attach arrives with T19. It starts with the error codes and the reply helpers; the bonus adds the wire format (section 6) and the attach types (section 7).
 
 ```python
 BAD_REQUEST = "BAD_REQUEST"

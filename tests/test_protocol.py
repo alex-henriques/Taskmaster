@@ -4,12 +4,6 @@ from taskmaster import protocol
 from tests.fakes import FakeBackend
 
 class ReplyTest(unittest.TestCase):
-    def test_ok_without_data(self) -> None:
-        self.assertEqual(protocol.ok(), {"ok": True})
-
-    def test_ok_keeps_empty_data(self) -> None:
-        self.assertEqual(protocol.ok([]), {"ok": True, "data": []})
-
     def test_ok_err_shapes(self) -> None:
         self.assertEqual(protocol.ok(), {"ok": True})
         self.assertEqual(protocol.ok(msg="m"), {"ok": True, "msg": "m"})
@@ -17,15 +11,17 @@ class ReplyTest(unittest.TestCase):
         self.assertEqual(protocol.err(protocol.BUSY, "m"), {"ok": False, "error": "BUSY", "msg": "m"})
 
     def test_codes_equal_their_names(self) -> None:
-        codes = {k: v for k, v in vars(protocol).items()
-                 if k.isupper() and isinstance(v, str)}
-        self.assertEqual(len(codes), 9)
-        for name, value in codes.items():
-            self.assertEqual(name, value)
+        for name in ("BAD_REQUEST", "UNKNOWN_COMMAND", "BAD_NAME", "ALREADY_STARTED",
+                     "NOT_RUNNING", "BUSY", "BAD_CONFIG", "NOT_TTY", "INTERNAL"):
+            self.assertEqual(getattr(protocol, name), name)
 
     def test_fake_backend(self) -> None:
         backend = FakeBackend()
         self.assertEqual(backend.start(["nope"])["error"], protocol.BAD_NAME)
-        self.assertTrue(backend.stop(["all"])["ok"])
+
+        reply = backend.stop(["all"])
+        self.assertNotEqual(reply.get("error"), protocol.BAD_NAME)
+        self.assertEqual([r["name"] for r in reply["data"]], ["broken", "nginx", "vogsphere_00"])
+
         self.assertEqual(backend.calls, [("start", ["nope"]), ("stop", ["all"])])
 

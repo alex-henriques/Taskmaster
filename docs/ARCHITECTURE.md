@@ -32,9 +32,9 @@ We are building a process supervisor in the spirit of `supervisord`, in Python. 
 - A bonus feature breaking the mandatory part.
 
 **Constraints**
-- **Python ≥ 3.10.** `Popen` needs 3.9 or newer for `umask`, `user`, `group` and `extra_groups`, so 3.10 covers it. Check the version on the VM.
-  - Every module starts with `from __future__ import annotations`, a project convention that keeps annotations lazy and uniform.
-  - `match` statements are allowed (they need 3.10).
+- **Python ≥ 3.10.** The school machines have 3.10.12, so the minimum cannot go higher, and the VM has 3.14. `Popen` needs at least 3.9 anyway, for `umask`, `user`, `group` and `extra_groups`.
+- Every module starts with `from __future__ import annotations`, so that type hints are not evaluated at import time, and a hint can name a class defined further down the file.
+- `match` statements are allowed (they need 3.10).
 - **Libraries:** the standard library plus PyYAML only. PyYAML is allowed because it parses the config.
   - Tests use `unittest`, not `pytest`, to stay clear of the external-library rule.
 - **Linux VM.** The mandatory part runs without root. The privilege bonus needs root.
@@ -113,7 +113,7 @@ Taskmaster/
 │   ├── __init__.py              (new)
 │   ├── main.py                  B   program 1: core and shell in one process
 │   ├── api.py                   B   Api: the thread-safe backend over the core
-│   ├── protocol.py              (new) A+B   error codes, ok() and err(); bonus: wire format, attach types
+│   ├── protocol.py              (new) A+B   error codes, ok() and err(), Backend; bonus: wire format, attach types
 │   ├── core/                    A
 │   │   ├── __init__.py          (new)
 │   │   ├── config.py            load and validate the YAML into ProgramConfig
