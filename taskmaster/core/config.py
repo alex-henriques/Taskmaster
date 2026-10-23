@@ -55,7 +55,7 @@ def _int(value, minimum: int) -> int:
 
 
 def _duration(value) -> float:
-    if type(value) not in (int, float) or math.isnan(value) or value < 0:
+    if type(value) not in (int, float) or not math.isfinite(value) or value < 0:
         raise ValueError("must be a number >= 0")
     return float(value)
 
@@ -136,8 +136,6 @@ def _program(name: str, raw, base: str) -> ProgramConfig:
     where = f"programs.{name}"
     if not isinstance(raw, dict):
         raise ConfigError(f"{where}: must be a map of fields")
-    if "cmd" not in raw:
-        raise ConfigError(f"{where}.cmd: is required")
     values = {}
     for field, value in raw.items():
         if field not in _FIELDS:
@@ -146,6 +144,8 @@ def _program(name: str, raw, base: str) -> ProgramConfig:
             values[field] = _FIELDS[field](value)
         except (TypeError, ValueError) as e:
             raise ConfigError(f"{where}.{field}: {e}") from None
+    if "cmd" not in values:
+        raise ConfigError(f"{where}.cmd: is required")
     for field in _PATHS:
         if field in values:
             values[field] = os.path.join(base, values[field])
@@ -164,7 +164,7 @@ def load(path: str) -> dict[str, ProgramConfig]:
         or data.keys() != {"programs"}
         or not isinstance(data["programs"], dict)
     ):
-        raise ConfigError(f"{path}: the only top-level key must be programs")
+        raise ConfigError(f"{path}: needs one top-level key, programs, holding a map")
     base = os.path.dirname(os.path.abspath(path))
     configs: dict[str, ProgramConfig] = {}
     taken: set[str] = set()

@@ -76,6 +76,8 @@ class ConfigTest(unittest.TestCase):
                 "programs: {web: {cmd: ls, numprocs: 2}, web_01: {cmd: ls}}",
                 "programs.web_01",
             ),
+            ("programs: {web: {cmd: ls, stoptime: .inf}}", "programs.web.stoptime"),
+            ("programs: {web: {cmmd: ls}}", "programs.web.cmmd"),
         ]
         for text, prefix in cases:
             with self.subTest(text):
@@ -104,3 +106,8 @@ class ConfigTest(unittest.TestCase):
         path = os.path.join(self.dir, "nope.yaml")
         with self.assertRaises(ConfigError):
             load(path)
+
+    def test_bad_file(self) -> None:
+        for text in ("", "progams: {}", "programs:", "programs: [\n"):
+            with self.subTest(text), self.assertRaises(ConfigError):
+                self.load_text(text)
