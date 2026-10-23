@@ -17,6 +17,9 @@ def run(backend: Backend, *, shutdown_on_quit: bool) -> None:
             except KeyboardInterrupt:
                 print()
                 continue
+            except UnicodeDecodeError:
+                print("***Invalid input: not UTF-8")
+                continue
             except EOFError:
                 print()
                 break
