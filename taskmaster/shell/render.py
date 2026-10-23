@@ -4,7 +4,7 @@ import datetime
 
 
 def _uptime(seconds: float) -> str:
-    """`0:01:02, or `1 day, 0:01:02`, as supervisorctl shows it."""
+    """`0:01:02`, or `1 day, 0:01:02`, as supervisorctl shows it."""
     return str(datetime.timedelta(seconds=max(0, int(seconds))))
 
 
