@@ -25,7 +25,7 @@ also needs a package to create virtual environments:
 `sudo apt install python3-venv`.
 
 ```bash
-make install                         # create .venv and install PyYAML in it
+make install                         # create .venv with PyYAML (and ruff, for the commit hook)
 make run CONFIG=path/to/config.yaml  # start Taskmaster with your config file
 make test                            # run the tests
 make clean                           # delete .venv, caches and taskmaster.log
