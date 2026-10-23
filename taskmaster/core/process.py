@@ -65,7 +65,6 @@ class Process:
         if self.state is State.STOPPING:
             return self._refused(BUSY)
         self.attempts = 0
-        self.error = None
         self._spawn()
         return self._ok("starting")
 
@@ -85,6 +84,7 @@ class Process:
         return self._ok("stopping")
 
     def restart(self) -> dict:
+        self.log.info("%s: restart", self.name)
         if self.state in (State.STOPPED, State.EXITED, State.FATAL):
             self.start()
         elif self.state is State.BACKOFF:
@@ -102,7 +102,10 @@ class Process:
             return
         code = self.popen.returncode
         self.popen = None
-        self.exit = signal.Signals(-code).name if code < 0 else code
+        try:
+            self.exit = signal.Signals(-code).name if code < 0 else code
+        except ValueError:
+            self.exit = f"SIG{-code}"
         if self.state is State.STARTING:
             self._died_early(f"exited early with {self.exit}")
         elif self.state is State.RUNNING:
@@ -133,6 +136,7 @@ class Process:
         self.attempts += 1
         self.deadline = time.monotonic() + cfg.starttime
         self._set(State.STARTING, f"spawn, attempt {self.attempts}")
+        self.error = None
         try:
             with contextlib.ExitStack() as files:
                 stdout = stderr = subprocess.DEVNULL

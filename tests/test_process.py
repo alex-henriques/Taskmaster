@@ -76,7 +76,9 @@ class ProcessTest(unittest.TestCase):
             self.wait_state(p, State.FATAL, timeout=10)
         spawns = [line for line in logs.output if "-> STARTING" in line]
         self.assertEqual(len(spawns), 3)
-        self.assertTrue(3 <= time.monotonic() - t0 < 4)
+        elapsed = time.monotonic() - t0
+        self.assertGreaterEqual(elapsed, 3)
+        self.assertLess(elapsed, 4)
 
     def test_command_not_found(self) -> None:
         p = self.make("/nonexistent/command", startretries=0)
@@ -96,7 +98,7 @@ class ProcessTest(unittest.TestCase):
                 p = self.make(
                     "sh",
                     "-c",
-                    f"sleep 0.3; exit {code}",
+                    f"sleep 0.5; exit {code}",
                     starttime=0.1,
                     autorestart=policy,
                 )
@@ -105,13 +107,15 @@ class ProcessTest(unittest.TestCase):
                 self.assertIs(p.state, after)
 
     def test_killed_from_outside(self) -> None:
-        p = self.make("sleep", "30", starttime=0.1)
-        p.start()
-        self.wait_state(p, State.RUNNING)
-        with self.assertLogs(LOG, logging.WARNING):
-            os.kill(p.info()["pid"], signal.SIGKILL)
-            self.drive(p, lambda p: p.exit is not None)
-        self.assertEqual(p.info()["exit"], "SIGKILL")
+        for sig, name in ((signal.SIGKILL, "SIGKILL"), (40, "SIG40")):
+            with self.subTest(name):
+                p = self.make("sleep", "30", starttime=0.1)
+                p.start()
+                self.wait_state(p, State.RUNNING)
+                with self.assertLogs(LOG, logging.WARNING):
+                    os.kill(p.info()["pid"], sig)
+                    self.drive(p, lambda p: p.exit is not None)
+                self.assertEqual(p.info()["exit"], name)
 
     def test_sigkill_after_stoptime(self) -> None:
         p = self.make("sh", "-c", IGNORES_TERM, starttime=0.1, stoptime=0.5)
@@ -138,6 +142,20 @@ class ProcessTest(unittest.TestCase):
         self.wait_state(backoff, State.BACKOFF)
         self.assertTrue(backoff.stop()["ok"])
         self.assertIs(backoff.state, State.STOPPED)
+
+    def test_restart(self) -> None:
+        p = self.make("sleep", "30", starttime=0.1)
+        p.start()
+        self.wait_state(p, State.RUNNING)
+        old = p.info()["pid"]
+        p.restart()
+        self.assertIs(p.state, State.STOPPING)
+        self.wait_state(p, State.RUNNING)
+        self.assertNotEqual(p.info()["pid"], old)
+        p.restart()
+        p.stop()
+        self.drive(p, lambda p: not p.is_alive())
+        self.assertIs(p.state, State.STOPPED)
 
     def test_child_environment(self) -> None:
         out = os.path.join(self.dir, "out")
