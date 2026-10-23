@@ -82,7 +82,7 @@ def _help(args: list[str]) -> Result:
     if not args:
         width = max(len(c.usage) for c in COMMANDS.values())
         lines = ["commands (type help <command>):"]
-        lines += [f" {c.usage:<{width}} {c.help}" for c in COMMANDS.values()]
+        lines += [f" {c.usage:<{width}}  {c.help}" for c in COMMANDS.values()]
         return Result("\n".join(lines))
     cmd = COMMANDS.get(args[0])
     if cmd is None:

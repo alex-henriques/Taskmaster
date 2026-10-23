@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import unittest
 
+from taskmaster.protocol import Backend, BackendError
 from taskmaster.shell.commands import COMMANDS, Result, execute
 from tests.fakes import FakeBackend
 
@@ -23,15 +24,13 @@ class ExecuteTest(unittest.TestCase):
         )
         self.assertEqual(self.backend.calls, [("status", [])])
 
-    def test_status_bad_name(self) -> None:
-        result = execute("status nope", self.backend)
-        self.assertFalse(result.ok)
-        self.assertEqual(result.text, "ERROR (no such process: nope)")
-
-    def test_start_bad_name(self) -> None:
-        result = execute("start nope", self.backend)
-        self.assertFalse(result.ok)
-        self.assertIn("ERROR", result.text)
+    def test_bad_name(self) -> None:
+        for verb in ("status", "start"):
+            with self.subTest(verb):
+                self.assertEqual(
+                    execute(f"{verb} nope", self.backend),
+                    Result("ERROR (no such process: nope)", ok=False),
+                )
 
     def test_start_mixed(self) -> None:
         result = execute("start nginx vogsphere", self.backend)
@@ -81,11 +80,10 @@ class ExecuteTest(unittest.TestCase):
         self.assertEqual(self.backend.calls, [])
 
     def test_help_one_command(self) -> None:
-        text = execute("help start", self.backend).text
-        self.assertIn(COMMANDS["start"].usage, text)
-        for name in COMMANDS:
-            if name != "start":
-                self.assertNotIn(COMMANDS[name].usage, text)
+        c = COMMANDS["start"]
+        self.assertEqual(
+            execute("help start", self.backend), Result(f"{c.usage}\n   {c.help}")
+        )
 
     def test_help_unknown_command(self) -> None:
         self.assertFalse(execute("help frobnicate", self.backend).ok)
@@ -101,7 +99,16 @@ class ExecuteTest(unittest.TestCase):
         self.assertEqual(self.backend.calls, [])
 
     def test_table_matches_backend(self) -> None:
-        # every command that is not shell-only is a Backend method
+        # every command that is not shell only is a Backend method
         for name in COMMANDS:
             if name not in ("help", "quit"):
-                self.assertTrue(callable(getattr(self.backend, name)), name)
+                self.assertTrue(hasattr(Backend, name), name)
+
+
+def test_backend_error_propagates(self) -> None:
+    class Gone(FakeBackend):
+        def stop(self, names: list[str]) -> dict:
+            raise BackendError("gone")
+
+    with self.assertRaises(BackendError):
+        execute("stop all", Gone())
