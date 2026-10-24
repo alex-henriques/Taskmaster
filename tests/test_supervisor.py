@@ -10,7 +10,7 @@ import unittest
 
 from taskmaster.core.config import ProgramConfig
 from taskmaster.core.supervisor import Supervisor
-from taskmaster.protocol import BAD_NAME
+from taskmaster.protocol import BAD_NAME, BUSY
 
 LOG = logging.getLogger("test_supervisor")
 LOG.addHandler(logging.NullHandler())
@@ -163,6 +163,15 @@ class SupervisorTest(unittest.TestCase):
         )
         self.assertNotIn("Z", ps.stdout)
 
+    def test_status_sees_unreaped_death(self) -> None:
+        sup = self.make(ProgramConfig("x", SLEEP, starttime=0.1, autorestart="never"))
+        sup.start(["x"])
+        self.drive(sup, lambda: self.rows(sup) == [("x", "RUNNING")])
+        pid = sup.status([])["data"][0]["pid"]
+        os.kill(pid, signal.SIGKILL)
+        os.waitid(os.P_PID, pid, os.WEXITED | os.WNOWAIT)
+        self.assertEqual(self.rows(sup), [("x", "EXITED")])
+
     def test_autostart(self) -> None:
         sup = self.make(
             ProgramConfig("on", SLEEP), ProgramConfig("off", SLEEP, autostart=False)
@@ -181,3 +190,23 @@ class SupervisorTest(unittest.TestCase):
     def test_all_with_no_programs(self) -> None:
         sup = self.make()
         self.assertEqual(sup.stop(["all"]), {"ok": True, "data": []})
+
+    def test_shutdown(self) -> None:
+        sup = self.make(
+            ProgramConfig("x", SLEEP, numprocs=2, starttime=0.1),
+            ProgramConfig("off", SLEEP, autostart=False),
+        )
+        sup.autostart()
+        self.drive(
+            sup,
+            lambda: [s for _, s in self.rows(sup)] == ["STOPPED", "RUNNING", "RUNNING"],
+        )
+        self.assertEqual(sup.shutdown(), {"ok": True, "msg": "shutting down"})
+        self.assertFalse(sup.finished)
+        for reply in (sup.start(["off"]), sup.restart(["x"]), sup.reload()):
+            self.assertEqual(reply.get("error"), BUSY)
+        self.drive(sup, lambda: sup.finished)
+        self.assertEqual(
+            self.rows(sup),
+            [("off", "STOPPED"), ("x_00", "STOPPED"), ("x_01", "STOPPED")],
+        )

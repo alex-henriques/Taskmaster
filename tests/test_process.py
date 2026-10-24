@@ -16,7 +16,7 @@ from taskmaster.protocol import ALREADY_STARTED, BUSY, NOT_RUNNING
 LOG = logging.getLogger("test_process")
 LOG.addHandler(logging.NullHandler())
 
-IGNORES_TERM = 'trap "" TERM; while :; do sleep 1; done'
+IGNORES_TERM = 'trap "" TERM; exec sleep 30'
 
 
 class ProcessTest(unittest.TestCase):
