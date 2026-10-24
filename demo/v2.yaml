@@ -1,0 +1,66 @@
+programs:
+  forever:
+    cmd: "demo/programs/forever.sh"
+    numprocs: 3
+    umask: "022"
+    autostart: true
+    autorestart: always
+    exitcodes: 0
+    startretries: 3
+    starttime: 1
+    stopsignal: INT
+    stoptime: 5
+    stdout: /tmp/taskmaster-forever.out
+    stderr: /tmp/taskmaster-forever.err
+    env:
+      STARTED_BY: taskmaster
+      ANSWER: 42
+
+  crash:
+    cmd: "demo/programs/crash.sh"
+    autostart: true
+    autorestart: never
+    startretries: 2
+    starttime: 2
+
+  exit_expected:
+    cmd: "demo/programs/exitcode.sh 2"
+    autostart: false
+    autorestart: unexpected
+    exitcodes: [0, 2]
+    starttime: 1
+
+  flood:
+    cmd: "demo/programs/flood.sh"
+    autostart: false
+    autorestart: never
+    stdout: /dev/null
+
+  stubborn:
+    cmd: "demo/programs/stubborn.sh"
+    autostart: false
+    autorestart: never
+    stopsignal: TERM
+    stoptime: 3
+
+  whoami:
+    cmd: "./whoami.sh"
+    autostart: false
+    autorestart: never
+    umask: 077
+    workingdir: programs
+    stdout: /tmp/taskmaster-whoami.out
+    stderr: /tmp/taskmaster-whoami.err
+    env:
+      GREETING: "hello from taskmaster"
+      ANSWER: 42
+
+  echo:
+    cmd: "demo/programs/echo.sh"
+    autostart: false
+    autorestart: never
+
+  hello:
+    cmd: "/bin/sh -c 'echo hello; sleep 3600'"
+    autostart: false
+    autorestart: never
