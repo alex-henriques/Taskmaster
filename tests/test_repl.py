@@ -10,7 +10,7 @@ import traceback
 import unittest
 
 from taskmaster.protocol import BackendError
-from taskmaster.shell import repl
+from taskmaster.shell import commands, repl
 from tests.fakes import FakeBackend
 
 
@@ -24,6 +24,40 @@ class GoneOnShutdown(FakeBackend):
         raise BackendError("gone")
 
 
+class CandidatesTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.backend = FakeBackend()
+
+    def test_command_names(self) -> None:
+        self.assertEqual(
+            repl.candidates(self.backend, "", "st"), ["start", "status", "stop"]
+        )
+        self.assertEqual(
+            repl.candidates(self.backend, "", ""), sorted(commands.COMMANDS)
+        )
+        self.assertEqual(self.backend.calls, [])  # no need to ask the backend
+
+    def test_program_and_instance_names(self) -> None:
+        self.assertEqual(
+            repl.candidates(self.backend, "stop ", "vo"), ["vogsphere", "vogsphere_00"]
+        )
+        self.assertEqual(repl.candidates(self.backend, "start ", "a"), ["all"])
+        self.assertEqual(repl.candidates(self.backend, "status ", "n"), ["nginx"])
+
+    def test_names_are_asked_when_tab_is_pressed(self) -> None:
+        repl.candidates(self.backend, "stop ", "")
+        repl.candidates(self.backend, "stop ", "")
+        self.assertEqual(self.backend.calls, [("status", []), ("status", [])])
+
+    def test_second_name_is_completed_too(self) -> None:
+        self.assertEqual(repl.candidates(self.backend, "stop nginx ", "br"), ["broken"])
+
+    def test_nothing_for_commands_without_names(self) -> None:
+        for before in ("reload ", "shutdown ", "quit ", "help ", "bogus "):
+            with self.subTest(before=before):
+                self.assertEqual(repl.candidates(self.backend, before, ""), [])
+
+
 class ReplTest(unittest.TestCase):
     def spawn(self, backend: FakeBackend, shutdown_on_quit: bool = False) -> None:
         """Run repl.run in a child on a pty. When it returns, the child prints its calls."""
@@ -34,7 +68,7 @@ class ReplTest(unittest.TestCase):
         except OSError as e:
             self.skipTest(f"needs a pty: {e}")
         if pid == 0:
-            code = 1  # never return into unittest in the child, even on an exception
+            code = 1
             try:
                 sys.stdout, sys.stderr = sys.__stdout__, sys.__stderr__
                 repl.run(backend, shutdown_on_quit=shutdown_on_quit)
@@ -90,7 +124,7 @@ class ReplTest(unittest.TestCase):
         self.prompts(1)
         self.type(b"status\r")
         self.prompts(2)
-        self.assertIn("nginx         RUNNING  pid 4242", self.out.decode())
+        self.assertIn("nginx" + " " * 28 + "RUNNING   pid 4242", self.out.decode())
         self.type(b"quit\r")
         self.assertIn("calls: ['status']", self.finish())
 
@@ -142,6 +176,38 @@ class ReplTest(unittest.TestCase):
             self.type(line + b"\r")
             self.prompts(n)
         self.type(b"quit\r")
+        self.finish()
+
+    def test_tab_completes_commands_and_names(self) -> None:
+        self.spawn(FakeBackend())
+        self.prompts(1)
+        self.type(b"st\t\t")  # ambiguous: the second Tab lists the choices
+        self.read_until(lambda text: "start" in text and "stop" in text)
+        self.type(b"\x15stop vo\t")  # Ctrl-U, then the common prefix is completed
+        self.read_until(
+            lambda text: text.replace("\x07", "").endswith("stop vogsphere")
+        )
+        self.type(b"_\t")
+        self.read_until(lambda text: text.replace("\x07", "").endswith("vogsphere_00"))
+        self.type(b"\r")
+        self.read_until(lambda text: "vogsphere_00: ERROR (not running)" in text)
+        self.type(b"quit\r")
+        self.finish()
+
+    def test_tab_completes_names_with_a_dash(self) -> None:
+        row = {
+            "name": "web-app",
+            "state": "RUNNING",
+            "pid": 1,
+            "since": 0.0,
+            "exit": None,
+            "error": None,
+        }
+        self.spawn(FakeBackend([row]))
+        self.prompts(1)
+        self.type(b"stop web-a\t")  # "-" must not split the word being completed
+        self.read_until(lambda text: text.endswith("stop web-app"))
+        self.type(b"\x15quit\r")
         self.finish()
 
 
