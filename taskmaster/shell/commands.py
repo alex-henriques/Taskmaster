@@ -25,7 +25,6 @@ class Result:
     ok: bool = True
 
 
-# CONTRACTS §1, without attach (T19). help, usages and completion come from here only.
 COMMANDS: dict[str, Command] = {
     c.name: c
     for c in (
@@ -81,13 +80,14 @@ COMMANDS: dict[str, Command] = {
 def _help(args: list[str]) -> Result:
     if not args:
         width = max(len(c.usage) for c in COMMANDS.values())
-        lines = ["commands (type help <command>):"]
+        title = "commands (type help <command>):"
+        lines = [title, "=" * len(title)]
         lines += [f" {c.usage:<{width}}  {c.help}" for c in COMMANDS.values()]
         return Result("\n".join(lines))
     cmd = COMMANDS.get(args[0])
     if cmd is None:
         return Result(f"*** No help on {args[0]}", ok=False)
-    return Result(f"{cmd.usage}\n   {cmd.help}")
+    return Result(f"{cmd.usage}  {cmd.help}")
 
 
 def execute(line: str, backend: Backend) -> Result:

@@ -17,9 +17,9 @@ class ExecuteTest(unittest.TestCase):
         self.assertEqual(
             result.text.splitlines(),
             [
-                "broken        FATAL    can't find command 'nope'",
-                "nginx         RUNNING  pid 4242, uptime 0:01:02",
-                "vogsphere_00  STOPPED",
+                "broken                           FATAL     can't find command 'nope'",
+                "nginx                            RUNNING   pid 4242, uptime 0:01:02",
+                "vogsphere_00                     STOPPED   Not started",
             ],
         )
         self.assertEqual(self.backend.calls, [("status", [])])
@@ -82,7 +82,7 @@ class ExecuteTest(unittest.TestCase):
     def test_help_one_command(self) -> None:
         c = COMMANDS["start"]
         self.assertEqual(
-            execute("help start", self.backend), Result(f"{c.usage}\n   {c.help}")
+            execute("help start", self.backend), Result(f"{c.usage}  {c.help}")
         )
 
     def test_help_unknown_command(self) -> None:
