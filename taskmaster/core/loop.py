@@ -17,6 +17,7 @@ from taskmaster.protocol import INTERNAL, BackendError, err
 if TYPE_CHECKING:
     from taskmaster.core.supervisor import Supervisor
 
+NOT_RUNNING = "taskmaster is not running"
 SIGNALS = (signal.SIGCHLD, signal.SIGHUP, signal.SIGTERM, signal.SIGINT, signal.SIGQUIT)
 
 
@@ -43,7 +44,7 @@ class Loop:
         future: Future = Future()
         with self._lock:
             if self._closed:
-                raise BackendError("taskmaster is not running")
+                raise BackendError(NOT_RUNNING)
             self._calls.put((future, fn, args))
             with contextlib.suppress(BlockingIOError):
                 os.write(self._w, b"\0")
@@ -67,7 +68,8 @@ class Loop:
                 self._closed = True
                 self._thread = None
             for future, _, _ in self._drain():
-                future.set_exception(BackendError("taskmaster is not running"))
+                if future.set_running_or_notify_cancel():
+                    future.set_exception(BackendError(NOT_RUNNING))
             signal.set_wakeup_fd(old_fd)
             for sig, handler in old.items():
                 signal.signal(sig, handler)
@@ -83,11 +85,16 @@ class Loop:
             while chunk := os.read(fd, 4096):
                 data += chunk
         for future, fn, args in self._drain():
+            if not future.set_running_or_notify_cancel():
+                continue
             try:
                 reply = fn(*args)
             except Exception as e:
                 self.log.exception("error in a submitted call")
                 reply = err(INTERNAL, str(e))
+            except BaseException:
+                future.set_exception(BackendError(NOT_RUNNING))
+                raise
             future.set_result(reply)
         sup = self._sup
         for signum in dict.fromkeys(data):

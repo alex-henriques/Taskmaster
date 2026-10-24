@@ -20,6 +20,7 @@ class LoggerTest(unittest.TestCase):
             self.addCleanup(log.removeHandler, handler)
             self.addCleanup(handler.close)
             self.assertEqual(log.level, logging.INFO)
+            self.assertFalse(log.propagate)
             log.info("hello")
             with open(first) as f:
                 self.assertEqual(f.read(), "")

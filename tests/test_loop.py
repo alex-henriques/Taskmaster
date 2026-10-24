@@ -3,6 +3,7 @@ from __future__ import annotations
 import contextlib
 import os
 import signal
+import sys
 import tempfile
 import time
 import unittest
@@ -23,6 +24,9 @@ class LoopTest(unittest.TestCase):
         self.addCleanup(tmp.cleanup)
         self.log_path = os.path.join(tmp.name, "taskmaster.log")
         self.log = logger.setup(self.log_path)
+        handler = self.log.handlers[-1]
+        self.addCleanup(handler.close)
+        self.addCleanup(self.log.removeHandler, handler)
         self.loop = Loop(self.log, interactive=True)
 
     def make(self, *configs: ProgramConfig) -> Supervisor:
@@ -87,7 +91,7 @@ class LoopTest(unittest.TestCase):
         self.assertTrue(self.log_text().splitlines()[-1].endswith("taskmaster stopped"))
 
     def test_sigkill_after_stoptime(self) -> None:
-        cmd = ("sh", "-c", 'trap "" TERM; sleep 30')
+        cmd = ("sh", "-c", 'trap "" TERM; exec sleep 30')
         sup = self.make(ProgramConfig("t", cmd, starttime=0.3, stoptime=0.5))
         self.run_with(sup, self.kill_when("-> RUNNING"))
         self.assertIn("killed after stoptime", self.log_text())
@@ -152,13 +156,62 @@ class LoopTest(unittest.TestCase):
         self.assertIn("ERROR error in a submitted call", self.log_text())
         self.assertIn("RuntimeError: boom", self.log_text())
 
+    def test_cancelled_call_is_skipped(self) -> None:
+        sup = self.make()
+        ran = []
+        cancelled = self.loop.submit(ran.append, "cancelled")
+        cancelled.cancel()
+        later = self.loop.submit(lambda: "later")
+        self.run_with(sup, lambda: self.assertEqual(later.result(timeout=2), "later"))
+        self.assertEqual(ran, [])
+
+    def test_base_exception_in_a_call(self) -> None:
+        sup = self.make()
+        call = self.loop.submit(sys.exit, 3)
+        with self.assertRaises(SystemExit):
+            self.loop.run(sup)
+        self.assertIsInstance(call.exception(timeout=0), BackendError)
+        self.assertEqual(signal.set_wakeup_fd(-1), -1)
+
+    def test_error_in_reap_keeps_the_loop_going(self) -> None:
+        cmd = ("sh", "-c", "exit 1")
+        sup = self.make(ProgramConfig("bad", cmd, startretries=1, starttime=0.2))
+        reap = sup.reap
+
+        def failing_reap() -> None:
+            reap()
+            raise RuntimeError("reap boom")
+
+        sup.reap = failing_reap
+        self.run_with(sup, self.kill_when("gave up"))
+        self.assertIn("ERROR error in", self.log_text())
+        self.assertIn("RuntimeError: reap boom", self.log_text())
+
+    def test_error_in_tick_keeps_the_loop_going(self) -> None:
+        sup = self.make()
+        tick = sup.tick
+
+        def failing_tick(now: float) -> None:
+            tick(now)
+            raise RuntimeError("tick boom")
+
+        sup.tick = failing_tick
+        self.run_with(
+            sup, lambda: self.assertEqual(self.loop.submit(lambda: 1).result(), 1)
+        )
+        self.assertIn("ERROR error in", self.log_text())
+        self.assertIn("RuntimeError: tick boom", self.log_text())
+
     def test_after_run(self) -> None:
         before = signal.getsignal(signal.SIGTERM)
         sup = self.make()
         sup.shutdown()
         queued = self.loop.submit(lambda: None)
+        cancelled = self.loop.submit(lambda: None)
+        cancelled.cancel()
         self.assertEqual(self.loop.run(sup), 0)
         self.assertIsInstance(queued.exception(timeout=0), BackendError)
+        self.assertTrue(cancelled.cancelled())
         with self.assertRaises(BackendError):
             self.loop.submit(lambda: None)
         self.assertFalse(self.loop.in_loop_thread())
