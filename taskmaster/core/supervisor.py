@@ -7,7 +7,7 @@ from collections.abc import Callable
 
 from taskmaster.core.config import ProgramConfig
 from taskmaster.core.process import Process
-from taskmaster.protocol import BAD_NAME, err, ok
+from taskmaster.protocol import BAD_NAME, BUSY, INTERNAL, err, ok
 
 
 class Supervisor:
@@ -20,12 +20,18 @@ class Supervisor:
         log: logging.Logger,
         sel: selectors.BaseSelector,
     ) -> None:
-        self.finished = False
         self.procs = {
             name: Process(name, cfg, log, sel)
             for cfg in configs.values()
             for name in cfg.instance_names()
         }
+        self.log = log
+        self.shutting_down = False
+
+    @property
+    def finished(self) -> bool:
+        """True once a shutdown has started and no child is left alive."""
+        return self.shutting_down and not any(p.is_alive() for p in self.procs.values())
 
     def autostart(self) -> None:
         for p in self.procs.values():
@@ -35,16 +41,33 @@ class Supervisor:
     def status(self, names: list[str]) -> dict:
         if bad := self._bad_name(names):
             return bad
+        self.reap()
         return ok([p.info() for p in self._select(names or ["all"])])
 
     def start(self, names: list[str]) -> dict:
+        if busy := self._busy():
+            return busy
         return self._act(names, Process.start)
 
     def stop(self, names: list[str]) -> dict:
         return self._act(names, Process.stop)
 
     def restart(self, names: list[str]) -> dict:
+        if busy := self._busy():
+            return busy
         return self._act(names, Process.restart)
+
+    def reload(self) -> dict:
+        if busy := self._busy():
+            return busy
+        return err(INTERNAL, "reload arrives with issue #12")
+
+    def shutdown(self) -> dict:
+        self.log.info("shutdown request")
+        self.shutting_down = True
+        for p in self.procs.values():
+            p.stop()
+        return ok(msg="shutting down")
 
     def reap(self) -> None:
         for p in self.procs.values():
@@ -82,3 +105,7 @@ class Supervisor:
             return bad
         results = [command(p) for p in self._select(names)]
         return {"ok": all(r["ok"] for r in results), "data": results}
+
+    def _busy(self) -> dict | None:
+        """BUSY once a shutdown has started, for the commands that would start something"""
+        return err(BUSY, "shutting down") if self.shutting_down else None
