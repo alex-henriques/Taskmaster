@@ -26,9 +26,11 @@ def main(argv: list[str]) -> int:
     try:
         return api.run()
     finally:
-        shell.join(timeout=2)
-        if saved is not None:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, saved)
+        try:
+            shell.join(timeout=0.5)
+        finally:
+            if saved is not None:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, saved)
 
 
 if __name__ == "__main__":
