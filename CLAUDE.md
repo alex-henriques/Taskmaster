@@ -41,7 +41,7 @@ CI (`.github/workflows/ci.yml`) runs only `python3 -m unittest -v` on Python 3.1
 
 One process (`python3 -m taskmaster.main CONFIG`), two threads:
 
-- **Core (`taskmaster/core/`, Person A, viceda-s)** runs in the **main thread** on a single `selectors` loop (`core/loop.py`, not created yet). It is the only owner of process state, so there are no locks. It **never blocks** (no `sleep`, no blocking `wait`/write) and never prints or reads the terminal. Signals reach it through `signal.set_wakeup_fd`, which is why it must be the main thread.
+- **Core (`taskmaster/core/`, Person A, viceda-s)** runs in the **main thread** on a single `selectors` loop (`core/loop.py`). It is the only owner of process state, so there are no locks. It **never blocks** (no `sleep`, no blocking `wait`/write) and never prints or reads the terminal. Signals reach it through `signal.set_wakeup_fd`, which is why it must be the main thread.
 - **Shell (`taskmaster/shell/`, `api.py`, `main.py`, `demo/`, Person B, alex-henriques)** runs in a second thread and only talks to a **backend** (the `Backend` protocol in `protocol.py`): `Api` in-process for the mandatory part, `RemoteApi` over a UNIX socket for the bonus, `tests/fakes.FakeBackend` in tests. `Api` methods are `Loop.submit(fn, *args).result()`; `submit` is the only way another thread touches the core.
 - **Replies are plain dicts** built with `protocol.ok()` / `protocol.err(CODE, msg)`, the same dicts that go over the wire as JSON in the bonus. A failed request is a reply with `ok: False`, never an exception. `BackendError` is raised only when the backend is gone. Error codes are a closed list (CONTRACTS §3).
 - `protocol.py` imports nothing from the package, so both sides can import it without cycles.
