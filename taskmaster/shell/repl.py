@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import re
 import readline
 
@@ -51,7 +52,7 @@ def _complete_with(backend: Backend) -> None:
 
 
 def run(backend: Backend, *, shutdown_on_quit: bool) -> None:
-    """Read lines until quit, Ctrl-D or a lost backend. The only place the shell prints."""
+    """Read lines until quit, Ctrl-D, a lost terminal or a lost backend. The only place the shell prints."""
     _complete_with(backend)
     try:
         while True:
@@ -75,3 +76,7 @@ def run(backend: Backend, *, shutdown_on_quit: bool) -> None:
             print(render.results(backend.shutdown()))
     except BackendError as e:
         print(e)
+    except OSError:
+        if shutdown_on_quit:
+            with contextlib.suppress(BackendError):
+                backend.shutdown()
