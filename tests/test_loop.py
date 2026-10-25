@@ -9,7 +9,7 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
-from taskmaster.core import logger
+from taskmaster.core import config, logger
 from taskmaster.core.config import ProgramConfig
 from taskmaster.core.loop import Loop
 from taskmaster.core.supervisor import Supervisor
@@ -135,6 +135,22 @@ class LoopTest(unittest.TestCase):
         body = self.kill_when("taskmaster started", signal.SIGINT)
         self.assertEqual(self.run_with(sup, body), 0)
         self.assertIn("received SIGINT", self.log_text())
+
+    def test_sighup_reloads(self) -> None:
+        path = os.path.join(os.path.dirname(self.log_path), "taskmaster.yaml")
+        with open(path, "w") as f:
+            f.write("programs: {}\n")
+        sup = Supervisor(path, config.load(path), self.log, self.loop.sel)
+
+        def body() -> None:
+            with open(path, "w") as f:
+                f.write("programs:\n  a:\n    cmd: sleep 30\n    autostart: false\n")
+            os.kill(os.getpid(), signal.SIGHUP)
+            self.wait_log("reload: added ['a']")
+
+        self.assertEqual(self.run_with(sup, body), 0)
+        self.assertIn("received SIGHUP", self.log_text())
+        self.assertEqual([r["name"] for r in sup.status([])["data"]], ["a"])
 
     def test_submit(self) -> None:
         sup = self.make()
