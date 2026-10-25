@@ -74,7 +74,7 @@ start forever_00
 status
 restart forever_00
 status
-restart all
+restart forever_00 forever_01
 status
 start nope
 ```
@@ -93,8 +93,8 @@ start nope
 **show** every program from `demo/v1.yaml` is listed:
 `crash echo exit_expected exit_unexpected flood forever_00 forever_01 stubborn whoami`.
 `forever` (`numprocs: 2`) is `forever_00` and `forever_01`. Programs with
-`autostart: true` (`forever`, `crash`) are already running or FATAL, and the rest
-are `STOPPED  Not started`.
+`autostart: true` are `forever` (RUNNING) and `crash`, which shows BACKOFF for
+about 3 s and then FATAL. All the others are `STOPPED  Not started`.
 
 ## 4. Logging
 
@@ -104,7 +104,7 @@ next sections. The full list to point at:
 | Event | Where we produce it | Level | What the log line looks like |
 |---|---|---|---|
 | start | §2 | INFO | `forever_00: STOPPED -> STARTING (spawn, attempt 1)`, then `STARTING -> RUNNING (alive after 1.0 s)` |
-| stop | §2 | INFO | `forever_00: RUNNING -> STOPPING (stop, sent INT)`, then `STOPPING -> STOPPED (exit SIGINT)` |
+| stop | §2 | INFO | `forever_00: RUNNING -> STOPPING (stop, sent SIGINT)`, then `STOPPING -> STOPPED (exit SIGINT)` |
 | restart | §2 | INFO | `forever_00: restart` |
 | unexpected death | §6.2 and §7 | WARNING | `exit_unexpected: RUNNING -> EXITED (exit 3, unexpected)` |
 | SIGKILL after `stoptime` | §6.4 | WARNING | `stubborn: killed after stoptime` |
@@ -180,24 +180,30 @@ child."
 
 ### 5b. The slow stop case (optional, but be ready to explain it)
 
-`stubborn` is still running from §5. It ignores `TERM` and takes `stoptime: 3`
-to be killed. To get a window that is easy to hit, set `stoptime: 30` for
-`stubborn` in `demo/live.yaml` first, and `reload`.
+`stubborn` ignores `TERM` and is only killed after its `stoptime`. To get a
+window that is easy to hit, give it a longer one first.
 
 **do**
 
-1. Remove the `stubborn` block from `demo/live.yaml` and run `reload`.
-2. Before the stop time passes, put the block back and run `reload` again.
-3. Run `status`, then `start stubborn`, then `start all`.
+1. T2: `sed -i 's/stoptime: 3/stoptime: 10/' demo/live.yaml`. T1: `reload`.
+   This changes `stubborn`, so it is stopped and re-added. Wait until
+   `status stubborn` says STOPPED (about 3 s).
+2. T1: `start stubborn`, and wait for RUNNING.
+3. T2: remove the `stubborn` block from `demo/live.yaml`. T1: `reload`.
+4. Before 10 s have passed, T2: put the block back (with `stoptime: 10`).
+   T1: `reload` again.
+5. T1: `status`, then `start stubborn exit_expected`.
 
 **show**
-- `status` shows `stubborn` STOPPING, with the same pid, not a duplicate.
-- `start stubborn` during that time answers `BUSY`, and `start all` still starts
-  the other programs.
-- `ps aux | grep stubborn` shows one process, with no orphan.
+- After step 3 and after step 4, `status` shows `stubborn` STOPPING, with the
+  same pid, not a duplicate.
+- `start stubborn exit_expected` answers `stubborn: ERROR (busy: reload pending)`
+  and `exit_expected: starting`: the others still start.
+- `ps aux | grep stubborn | grep -v grep` shows one `stubborn.sh`, no orphan.
 - When the old process is finally gone, `stubborn` shows up again as **STOPPED**
-  (its config has `autostart: false`), and `start stubborn` runs it with a new pid.
+  (its config has `autostart: false`).
 
+Leave `stubborn` stopped: §6 starts it again when needed.
 
 ## 6. Every option, with its proof
 
@@ -263,7 +269,7 @@ status
 - `forever` uses `stopsignal: INT`.
 
   **do** `stop forever_00`. **show** it stops at once (STOPPED within the
-  second), and the log says \stop, sent INT`.Keep "within the second" only after you've seen it happen in a rehearsal. It depends on howshhandlesSIGINT`
+   second; about 0.2 s in our run), and the log says `stop, sent SIGINT`.
 - `stubborn` uses `stopsignal: TERM`, ignores it, and has `stoptime: 3`.
 
   **do** `start stubborn`, then `stop stubborn`, and watch `status`.
@@ -277,20 +283,20 @@ status
 
 **do** (T1)
 
-​```
+```
 start stubborn
 status                     # note the pids of forever_00 and stubborn
-​```
+```
 
 (`stubborn` was stopped in §6.4, so it has to be started again here.)
 
 **do** (T2), with the pids from `status`
 
-​```bash
+```bash
 ls -l /proc/<pid of forever_00>/fd/1 /proc/<pid of forever_00>/fd/2
 tail -3 /tmp/taskmaster-forever.out
 ls -l /proc/<pid of stubborn>/fd/1 /proc/<pid of stubborn>/fd/2
-​```
+```
 
 **show**
 - `forever_00`: fd 1 → `/tmp/taskmaster-forever.out`, fd 2 →
@@ -314,7 +320,7 @@ status                     # note the pids of whoami and forever_00
 **do** (T2), with the pids from `status`
 
 ```bash
-cat /tmp/taskmaster-whoami.out
+head -3 /tmp/taskmaster-whoami.out
 grep Umask /proc/<pid of whoami>/status
 ls -l /proc/<pid of whoami>/cwd
 tr '\0' '\n' < /proc/<pid of whoami>/environ | grep -E 'GREETING|ANSWER'
@@ -324,9 +330,8 @@ tr '\0' '\n' < /proc/<pid of forever_00>/environ | grep STARTED_BY
 ```
 
 **show**
-- The output file has `id`, the working directory (`.../demo/programs`),
-  `umask` (`0077`) and the environment with `GREETING=hello from taskmaster` and
-  `ANSWER=42`.
+- The output file starts with `id`, the working directory (`.../demo/programs`)
+  and `umask` (`0077`).
 - `/proc/<pid>/status` says `Umask: 0077` for `whoami`, and `cwd` points to
   `demo/programs`.
 - `forever_00` says `Umask: 0022` and has `STARTED_BY=taskmaster`.
@@ -355,6 +360,12 @@ kill -9 <pid of forever_00>
 status
 ```
 
+```bash
+# T2: no defunct child of taskmaster
+ps -o stat,pid,cmd --ppid $(pgrep -f taskmaster.main) | grep '^Z'     # prints nothing
+```
+
+
 **show** `forever_00` is back with a **new pid** (`autorestart: always`). The log
 has a WARNING for the unexpected exit (killed by signal 9) and a new spawn.
 
@@ -382,7 +393,7 @@ the core never reads it. Then `stop flood`.
 - taskmaster exits by itself, with the shell prompt back, and the terminal still
   in a sane state (type something to check).
 - `ps aux | grep -E "forever|stubborn|sleep 3600" | grep -v grep` has no
-  leftover programs. The log has "shutting down" and "stopped".
+  leftover programs. The log has "shutdown request" and "taskmaster stopped".
 - `echo $?` is `0`.
 
 Start it again afterwards: `make run CONFIG=demo/live.yaml`.
@@ -420,9 +431,12 @@ status
 cp /tmp/good.yaml demo/live.yaml
 ```
 
-**show** `reload` answers with an error (`BAD_CONFIG`), every program keeps
-running with the same pid, and the log has an **ERROR** line. Then `reload` again
-with the good file to show taskmaster recovers.
+**show** `reload` answers `ERROR (invalid config, nothing changed: …)`, every
+program keeps running with the same pid, and the log has an **ERROR** line. Then
+`reload` again with the good file to show taskmaster recovers.
+
+A YAML syntax error, like the one above, shows YAML's own multi-line message. A
+bad field shows the short form, for example `programs.x.bogus: unknown field`.
 
 ### 8.4 kill -9 on taskmaster, then start it again
 
@@ -442,6 +456,7 @@ T1's terminal is left without echo: type `reset` and press Enter before going on
 Clean up and restart:
 
 ```bash
+# kills every demo program on this machine: fine on the VM, not on a shared machine
 pkill -f 'demo/programs/' ; pkill -f 'sleep 3600'
 make run CONFIG=demo/live.yaml
 ```
