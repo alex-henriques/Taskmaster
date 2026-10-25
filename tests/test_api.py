@@ -107,6 +107,28 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.run_with(body), 0)
         self.assertTrue(reply[0]["ok"])
 
+    def test_a_flooding_program_does_not_slow_the_calls_down(self) -> None:
+        seen = {}
+
+        def body() -> None:
+            with open("c.yaml", "a") as f:
+                f.write('  flood:\n    cmd: "yes"\n    autostart: false\n')
+            seen["reload"] = self.api.reload()
+            self.api.start(["flood"])
+            times = []
+            for _ in range(20):
+                start = time.monotonic()
+                self.api.status([])
+                times.append(time.monotonic() - start)
+                time.sleep(0.02)
+            seen["slowest"] = max(times)
+            seen["flood"] = self.api.status(["flood"])["data"][0]["state"]
+
+        self.assertEqual(self.run_with(body), 0)
+        self.assertTrue(seen["reload"]["ok"], seen["reload"])
+        self.assertIn(seen["flood"], ("STARTING", "RUNNING"))
+        self.assertLess(seen["slowest"], 0.5)
+
     def test_calls_after_run_raise_backend_error(self) -> None:
         self.assertEqual(self.run_with(lambda: None), 0)
         calls = {
