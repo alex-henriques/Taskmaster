@@ -21,6 +21,7 @@ Three terminals, all in the repo root.
 git clone <repo-url> taskmaster-defense && cd taskmaster-defense
 make install
 make test                              # all green
+pgrep -af -- '-m taskmaster\.main'     # prints nothing: no test left a taskmaster behind
 
 # a working copy of the config, in demo/ so relative paths keep working
 cp demo/v1.yaml demo/live.yaml
@@ -34,8 +35,16 @@ rm -f taskmaster.log /tmp/taskmaster-*.out /tmp/taskmaster-*.err
 
 ```bash
 # T1
-make run CONFIG=demo/live.yaml
+.venv/bin/python3 -m taskmaster.main demo/live.yaml
 ```
+
+> This is what `make run CONFIG=demo/live.yaml` runs. We type it directly
+> because `make` shares T1's terminal: it also gets the `Ctrl-C`s of §8.5, and
+> then exits with 130 instead of 0 when taskmaster quits.
+>
+> Always leave taskmaster with `quit`. If T1's window is closed by mistake, the
+> shell sees the lost terminal and shuts down as for `quit`: the programs are
+> stopped and taskmaster exits, so just start it again.
 
 ```bash
 # T3, keep this open for the whole session
@@ -84,7 +93,12 @@ start nope
 - `stop` goes to STOPPED, `start` to STARTING and then RUNNING, `restart` gives a
   new pid (compare the pid column before and after).
 - `start nope` gives a readable error (`no such process: nope`), not a traceback.
-- Tab completion works on command names and program names.
+- Tab completion works on command names and program names, and `↑` brings back
+  the previous command.
+
+**say**, if the grader types `start all`: `echo` ends FATAL. `echo.sh` reads its
+stdin, which taskmaster sets to `/dev/null`, so it exits at once, before its
+`starttime`.
 
 ## 3. Config file
 
@@ -93,8 +107,9 @@ start nope
 **show** every program from `demo/v1.yaml` is listed:
 `crash echo exit_expected exit_unexpected flood forever_00 forever_01 stubborn whoami`.
 `forever` (`numprocs: 2`) is `forever_00` and `forever_01`. Programs with
-`autostart: true` are `forever` (RUNNING) and `crash`, which shows BACKOFF for
-about 3 s and then FATAL. All the others are `STOPPED  Not started`.
+`autostart: true` are `forever` (RUNNING) and `crash`, which went BACKOFF for
+about 3 s right after startup and is FATAL by now. All the others are
+`STOPPED  Not started`.
 
 ## 4. Logging
 
@@ -160,7 +175,7 @@ status
 ```bash
 # T2
 cp demo/v1.yaml demo/live.yaml
-kill -HUP $(pgrep -f 'taskmaster.main')
+kill -HUP $(pgrep -f -- '-m taskmaster\.main')
 ```
 
 ```
@@ -181,29 +196,42 @@ child."
 ### 5b. The slow stop case (optional, but be ready to explain it)
 
 `stubborn` ignores `TERM` and is only killed after its `stoptime`. To get a
-window that is easy to hit, give it a longer one first.
+window that is easy to hit by hand, we give it `stoptime: 30`, and prepare both
+files first, so each step is a single `cp`.
 
 **do**
 
-1. T2: `sed -i 's/stoptime: 3/stoptime: 10/' demo/live.yaml`. T1: `reload`.
-   This changes `stubborn`, so it is stopped and re-added. Wait until
+0. T2: prepare the two files (the live config is v1 again at this point).
+
+   ```bash
+   sed 's/stoptime: 3/stoptime: 30/' demo/v1.yaml > /tmp/with.yaml
+   sed '/^  stubborn:/,/^$/d' /tmp/with.yaml > /tmp/without.yaml
+   ```
+
+1. T2: `cp /tmp/with.yaml demo/live.yaml`. T1: `reload`, which answers
+   `added: none, changed: stubborn, removed: none`. The old `stubborn` is
+   stopped with its old `stoptime: 3`, then re-added. Wait until
    `status stubborn` says STOPPED (about 3 s).
-2. T1: `start stubborn`, and wait for RUNNING.
-3. T2: remove the `stubborn` block from `demo/live.yaml`. T1: `reload`.
-4. Before 10 s have passed, T2: put the block back (with `stoptime: 10`).
-   T1: `reload` again.
+2. T1: `start stubborn`, and wait for RUNNING. T2: `pgrep -f stubborn.sh`, and
+   write the pid down.
+3. T2: `cp /tmp/without.yaml demo/live.yaml`. T1: `reload` (`removed: stubborn`).
+   The 30 s start now.
+4. T2: `cp /tmp/with.yaml demo/live.yaml`. T1: `reload` again (`added: stubborn`).
 5. T1: `status`, then `start stubborn exit_expected`.
 
 **show**
-- After step 3 and after step 4, `status` shows `stubborn` STOPPING, with the
-  same pid, not a duplicate.
-- `start stubborn exit_expected` answers `stubborn: ERROR (busy: reload pending)`
-  and `exit_expected: starting`: the others still start.
-- `ps aux | grep stubborn | grep -v grep` shows one `stubborn.sh`, no orphan.
-- When the old process is finally gone, `stubborn` shows up again as **STOPPED**
-  (its config has `autostart: false`).
+- After step 3 and after step 4, `status` has a single `stubborn  STOPPING`
+  line (`status` shows no pid while stopping), and `pgrep -f stubborn.sh` in T2
+  still prints the one pid from step 2: no duplicate.
+- `start stubborn exit_expected` answers, in name order,
+  `exit_expected: starting` and `stubborn: ERROR (busy: reload pending)`: the
+  others still start.
+- When the old process is finally killed, 30 s after step 3, `stubborn` shows up
+  again as **STOPPED** (its config has `autostart: false`), and
+  `pgrep -f stubborn.sh` prints nothing: no orphan.
 
-Leave `stubborn` stopped: §6 starts it again when needed.
+Wait for that STOPPED before §6, or §6's reload finds `stubborn` still stopping
+and `start stubborn` answers busy.
 
 ## 6. Every option, with its proof
 
@@ -212,8 +240,9 @@ Reset to v1 first: `cp demo/v1.yaml demo/live.yaml`, then `reload`.
 ### 6.1 `cmd`, `numprocs`, `autostart`
 
 **show** (T1 `status`): `forever_00` and `forever_01` are RUNNING because
-`autostart: true`. `whoami` is STOPPED, because `autostart: false`. Then
-`start whoami` brings it up.
+`autostart: true` and `numprocs: 2`, each with its own pid. `exit_unexpected`,
+`flood` and `echo` are `STOPPED  Not started`, because `autostart: false`.
+`whoami` is RUNNING only because we started it by hand in §5.
 
 ### 6.2 `autorestart` and `exitcodes`
 
@@ -246,7 +275,7 @@ status
 **show**
 - `exit_expected` ends EXITED (code 2) and stays there. The log line is INFO.
 - `exit_unexpected` is started again and again. The log shows a WARNING per
-  unexpected exit with `exit code 3`, and a new pid each time.
+  unexpected exit with `exit 3, unexpected`, and a new pid each time.
 - `stop exit_unexpected` ends the loop.
 - `stubborn` ends EXITED, with `exit SIGKILL, unexpected` in the log, and **stays
   there**, because its `autorestart` is `never`.
@@ -261,8 +290,8 @@ status
 - It goes STARTING → BACKOFF → STARTING, with two retries after the first
   attempt, then **FATAL**. (The whole sequence takes about 3 s: a retry after 1 s, then after 2 s)
 - The log has one line per attempt and a WARNING when it gives up.
-- `forever` (`starttime: 1`) stays STARTING for about 1 s, then RUNNING, which
-  is the proof that `starttime` is honoured.
+- `forever` (`starttime: 1`) is the proof that `starttime` is honoured: in §6.4
+  it stays STARTING for about 1 s, then RUNNING.
 
 ### 6.4 `stopsignal` and `stoptime`
 
@@ -270,6 +299,10 @@ status
 
   **do** `stop forever_00`. **show** it stops at once (STOPPED within the
    second; about 0.2 s in our run), and the log says `stop, sent SIGINT`.
+
+  **do** `start forever_00`, then `status` at once and again after 1 s.
+  **show** STARTING, then RUNNING: that is `starttime: 1` (§6.3). Leave it
+  running, because §6.5 to §7 need its pid.
 - `stubborn` uses `stopsignal: TERM`, ignores it, and has `stoptime: 3`.
 
   **do** `start stubborn`, then `stop stubborn`, and watch `status`.
@@ -362,7 +395,7 @@ status
 
 ```bash
 # T2: no defunct child of taskmaster
-ps -o stat,pid,cmd --ppid $(pgrep -f taskmaster.main) | grep '^Z'     # prints nothing
+ps -o stat,pid,cmd --ppid $(pgrep -f -- '-m taskmaster\.main') | grep '^Z'     # prints nothing
 ```
 
 
@@ -377,11 +410,12 @@ configured number of attempts, and the log says it gave up.
 ### 8.1 flood
 
 **do** (T1) `start flood`, and for 30 s keep using the shell: `status`, `help`,
-`status forever_00`. In T2 run `top -p $(pgrep -f taskmaster.main)`.
+`status forever_00`. In T2 run `top -p $(pgrep -f -- '-m taskmaster\.main')`.
 
 **show** every command answers right away, and taskmaster's CPU stays low,
-because `flood` (`yes`) writes to `/dev/null`, so there is no pipe to fill and
-the core never reads it. Then `stop flood`.
+because taskmaster never reads its programs' output: each child writes straight
+to its own file, here `/dev/null`, so there is no pipe for the core to drain.
+Then `stop flood`.
 
 **say** "The core never blocks. A program that floods output can't slow it down."
 
@@ -390,13 +424,14 @@ the core never reads it. Then `stop flood`.
 **do** (T1) make sure `forever`, `whoami` and `stubborn` are running, then `quit`.
 
 **show**
-- taskmaster exits by itself, with the shell prompt back, and the terminal still
-  in a sane state (type something to check).
+- taskmaster exits by itself after about 3 s, with the shell prompt back, and the
+  terminal still in a sane state (type something to check). **say** the 3 s are
+  `stubborn`: it ignores `TERM`, so it is killed after its `stoptime`.
 - `ps aux | grep -E "forever|stubborn|sleep 3600" | grep -v grep` has no
   leftover programs. The log has "shutdown request" and "taskmaster stopped".
 - `echo $?` is `0`.
 
-Start it again afterwards: `make run CONFIG=demo/live.yaml`.
+Start it again afterwards: `.venv/bin/python3 -m taskmaster.main demo/live.yaml`.
 
 ### 8.3 Invalid config
 
@@ -444,11 +479,12 @@ bad field shows the short form, for example `programs.x.bogus: unknown field`.
 
 ```bash
 # T2
-kill -9 $(pgrep -f taskmaster.main)
+kill -9 $(pgrep -f -- '-m taskmaster\.main')
 ps aux | grep -E "forever.sh|stubborn.sh|sleep 3600" | grep -v grep
 ```
 
-**show** the children are still alive. Re-adopting orphans is a documented
+**show** the two `forever.sh` are still alive (since the restart in §8.2 only
+`forever` runs; `crash` is FATAL). Re-adopting orphans is a documented
 non-goal, and `supervisord` doesn't do it either.
 
 T1's terminal is left without echo: type `reset` and press Enter before going on.
@@ -456,9 +492,13 @@ T1's terminal is left without echo: type `reset` and press Enter before going on
 Clean up and restart:
 
 ```bash
-# kills every demo program on this machine: fine on the VM, not on a shared machine
+# T2: kills every demo program on this machine: fine on the VM, not on a shared machine
 pkill -f 'demo/programs/' ; pkill -f 'sleep 3600'
-make run CONFIG=demo/live.yaml
+```
+
+```bash
+# T1
+.venv/bin/python3 -m taskmaster.main demo/live.yaml
 ```
 
 **show** taskmaster starts normally, `status` is correct, and the log file is
@@ -473,9 +513,13 @@ itself started."
 **do** (T1) at the prompt, press `Ctrl-C` 20 times in a row, with and without a
 half-typed line, then `status`.
 
-**show** taskmaster is still there, every program still RUNNING with the same
-pids, and a clean new prompt each time. The children are in their own session
-(`start_new_session`), so the terminal's `Ctrl-C` never reaches them.
+**show** taskmaster is still there, `forever_00` and `forever_01` still RUNNING
+with the same pids, and nothing happens at the prompt: no new prompt, and a
+half-typed line stays as it was (`Enter` runs it, `Ctrl-U` clears it).
+
+**say** the core gets the `SIGINT` through its own handler and ignores it while
+there is a shell. The children are in their own session (`start_new_session`),
+so the terminal's `Ctrl-C` never reaches them.
 
 ### 8.6 A `cmd` that does not exist
 
@@ -500,7 +544,7 @@ EOF
 
 ```
 # T1
-make run CONFIG=demo/ghost.yaml
+.venv/bin/python3 -m taskmaster.main demo/ghost.yaml
 status                     # wait about 3 s, then again
 start ghost
 status
@@ -512,7 +556,7 @@ quit
 - The log has a line such as `ghost: STARTING -> BACKOFF (spawn failed: [Errno 2] No such file or directory: '/does/not/exist'; retry in 1 s)`, and a WARNING when it gives up.
 - `start ghost` answers `ghost: starting`, and the failure shows up again in `status` and the log. There is no traceback anywhere, and the shell stays responsive.
 
-Delete `demo/ghost.yaml` afterwards. The main taskmaster can be started again with `make run CONFIG=demo/live.yaml` if the next steps need it.
+Delete `demo/ghost.yaml` afterwards. The main taskmaster can be started again with `.venv/bin/python3 -m taskmaster.main demo/live.yaml` if the next steps need it.
 
 ## 9. README
 

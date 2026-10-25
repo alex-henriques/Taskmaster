@@ -43,7 +43,6 @@ program:
 programs:
   web:
     cmd: "python3 -m http.server 8000"
-    numprocs: 2
     autorestart: unexpected
     exitcodes: [0, 2]
     stdout: /tmp/web.out
@@ -59,16 +58,16 @@ error, and the message names the exact path, such as
 | `cmd` | required | The command to run. It is split like a shell would split it, but no shell is used, so the pid is the program's own. For pipes or redirections write `cmd: "sh -c '…'"`. |
 | `numprocs` | `1` | How many copies to run. With more than one, they are named `name_00`, `name_01`, … |
 | `autostart` | `true` | Start the program when Taskmaster starts. |
-| `autorestart` | `unexpected` | `always`, `never`, or `unexpected` (only when the exit code is not in `exitcodes`). |
+| `autorestart` | `unexpected` | `always`, `never`, or `unexpected` (only when the exit code is not in `exitcodes`). `true` and `false` mean `always` and `never`. |
 | `exitcodes` | `[0]` | Exit codes that count as a normal exit. A single number or a list. |
 | `starttime` | `1` | Seconds the program must stay alive to count as started. |
 | `startretries` | `3` | How many times to try again after a failed start before giving up (FATAL). |
 | `stopsignal` | `TERM` | Signal sent to stop the program, such as `INT` or `SIGQUIT`. |
 | `stoptime` | `10` | Seconds to wait after `stopsignal` before sending `SIGKILL`. |
 | `stdout`, `stderr` | discarded | File to append the output to. Without it the output goes to `/dev/null`. |
-| `env` | `{}` | Variables added to Taskmaster's own environment. |
+| `env` | `{}` | Variables added to the environment the program inherits from Taskmaster. Values are strings or integers; quote anything else, such as `"true"`. |
 | `workingdir` | inherited | Directory to run the program in. |
-| `umask` | inherited | Umask of the program, such as `022`. |
+| `umask` | inherited | Umask of the program, such as `022`. Keep the leading `0` or use quotes (`"022"`): a plain `22` is read as a decimal number. |
 
 ## Using it
 
@@ -83,8 +82,9 @@ error, and the message names the exact path, such as
 | `help [command]` | List the commands, or show how to use one. |
 
 Signals: `SIGHUP` does the same as `reload`. `SIGTERM` and `SIGQUIT` shut
-Taskmaster down like `quit`. `Ctrl-C` is ignored by Taskmaster itself and only
-clears the line you are typing. On reload, programs whose settings did not
+Taskmaster down like `quit`. `Ctrl-C` at the prompt does nothing: Taskmaster
+and its programs keep running, and the line you are typing stays (`Ctrl-U`
+clears it). On reload, programs whose settings did not
 change are left alone, and a file with an error is refused as a whole, so
 nothing changes. Everything that happens is written to `taskmaster.log`.
 
