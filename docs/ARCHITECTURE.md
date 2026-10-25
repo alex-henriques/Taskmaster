@@ -12,10 +12,12 @@ The design of the whole project, bonus included. It fits the skeleton that is al
 We are building a process supervisor in the spirit of `supervisord`, in Python. The mandatory part must be flawless before any bonus work starts. The bonus covers the four ideas in the subject: privilege de-escalation, client/server, alerts and attach. Attach counts for 2 points on the grading sheet.
 
 **Goals**
-- Pass every item on the grading sheet, and be able to *prove* each one in the defense with the log file, `status` and `ps`.
+
+- Pass every item on the grading sheet, and be able to _prove_ each one in the defense with the log file, `status` and `ps`.
 - One core and one shell. The bonus reuses both: it only changes how the shell reaches the core.
 
 **Non-goals (on purpose)**
+
 - Log rotation: `logrotate` with `copytruncate` covers it.
 - TCP sockets: UNIX sockets only.
 - Email or webhook alerts: syslog is enough for the bonus point.
@@ -24,6 +26,7 @@ We are building a process supervisor in the spirit of `supervisord`, in Python. 
 - Re-adopting orphaned children after taskmaster dies from `kill -9`. supervisor does not do it either.
 
 **A failure, even if it "works"**
+
 - Restarting, on reload, programs whose config did not change.
 - The core blocking: `sleep`, a blocking `wait`, or a blocking write to a client.
 - Zombies, or a `status` that lies after a `kill -9`.
@@ -32,6 +35,7 @@ We are building a process supervisor in the spirit of `supervisord`, in Python. 
 - A bonus feature breaking the mandatory part.
 
 **Constraints**
+
 - **Python ≥ 3.10.** The school machines have 3.10.12, so the minimum cannot go higher, and the VM has 3.14. `Popen` needs at least 3.9 anyway, for `umask`, `user`, `group` and `extra_groups`.
 - Every module starts with `from __future__ import annotations`, so that type hints are not evaluated at import time, and a hint can name a class defined further down the file.
 - `match` statements are allowed (they need 3.10).
@@ -41,22 +45,22 @@ We are building a process supervisor in the spirit of `supervisord`, in Python. 
 
 ## 2. Decisions
 
-| Decision | Why |
-|---|---|
-| Python, with a YAML config that uses the subject's field names | team choice; the subject's example is YAML |
-| Split by layer: A owns `core/`, B owns `shell/`, `api.py` and `main.py` | few git conflicts; it is the skeleton already in the repo |
-| The core never prints or reads the terminal. The shell only calls a *backend*: `Api` in-process, `RemoteApi` over a socket in the bonus | the bonus becomes a second backend plus a server; the shell does not change |
-| The mandatory part is one process: the core loop in the main thread, the shell in a second thread, calls handed over with `Loop.submit` | no socket to break in the defense; signals only work in the main thread; the shell may block, the core may not |
-| Single-threaded core on `selectors` | process state has one owner, so no locks; the loop never blocks |
-| `Popen` with `start_new_session=True` | each child has its own session and group: the terminal's `Ctrl-C` does not reach it, and `killpg` gets the whole tree |
-| Reap with `popen.poll()` on every live process | `waitpid(-1)` behind `Popen`'s back makes `Popen.poll()` return `0` later (tested) |
-| `stopsignal` and `SIGKILL` go to the process group (`os.killpg`) | no orphaned grandchildren |
-| Reload: "unchanged" means equal normalized config; "changed" means remove, then add | simple, and unchanged programs are never touched |
-| Replies are immediate: `start` does not wait for RUNNING | the loop never blocks; `status` shows the outcome |
-| Bonus protocol: UNIX socket, one JSON message per line | easy to frame, and easy to debug with `nc -U` |
-| Attach only for `tty: true` programs; detach with `Ctrl-b d` | a pty is needed; same keys as tmux |
-| Alerts through syslog | the standard `logging` module already supports it |
-| One entry module per program: `main.py`, `daemon.py`, `ctl.py` | the two bonus programs are separate, as in supervisor |
+| Decision                                                                                                                                | Why                                                                                                                   |
+| --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Python, with a YAML config that uses the subject's field names                                                                          | team choice; the subject's example is YAML                                                                            |
+| Split by layer: A owns `core/`, B owns `shell/`, `api.py` and `main.py`                                                                 | few git conflicts; it is the skeleton already in the repo                                                             |
+| The core never prints or reads the terminal. The shell only calls a _backend_: `Api` in-process, `RemoteApi` over a socket in the bonus | the bonus becomes a second backend plus a server; the shell does not change                                           |
+| The mandatory part is one process: the core loop in the main thread, the shell in a second thread, calls handed over with `Loop.submit` | no socket to break in the defense; signals only work in the main thread; the shell may block, the core may not        |
+| Single-threaded core on `selectors`                                                                                                     | process state has one owner, so no locks; the loop never blocks                                                       |
+| `Popen` with `start_new_session=True`                                                                                                   | each child has its own session and group: the terminal's `Ctrl-C` does not reach it, and `killpg` gets the whole tree |
+| Reap with `popen.poll()` on every live process                                                                                          | `waitpid(-1)` behind `Popen`'s back makes `Popen.poll()` return `0` later (tested)                                    |
+| `stopsignal` and `SIGKILL` go to the process group (`os.killpg`)                                                                        | no orphaned grandchildren                                                                                             |
+| Reload: "unchanged" means equal normalized config; "changed" means remove, then add                                                     | simple, and unchanged programs are never touched                                                                      |
+| Replies are immediate: `start` does not wait for RUNNING                                                                                | the loop never blocks; `status` shows the outcome                                                                     |
+| Bonus protocol: UNIX socket, one JSON message per line                                                                                  | easy to frame, and easy to debug with `nc -U`                                                                         |
+| Attach only for `tty: true` programs; detach with `Ctrl-b d`                                                                            | a pty is needed; same keys as tmux                                                                                    |
+| Alerts through syslog                                                                                                                   | the standard `logging` module already supports it                                                                     |
+| One entry module per program: `main.py`, `daemon.py`, `ctl.py`                                                                          | the two bonus programs are separate, as in supervisor                                                                 |
 
 ## 3. System overview
 
@@ -79,23 +83,24 @@ flowchart LR
 
 **The core (A)** lives in `taskmaster/core/`. It owns every process and runs in the main thread. It never prints and never reads the terminal.
 
-**The shell (B)** lives in `taskmaster/shell/`. It only talks to a *backend*, an object with the methods in [CONTRACTS §5.2](CONTRACTS.md#52-backend-and-api).
+**The shell (B)** lives in `taskmaster/shell/`. It only talks to a _backend_, an object with the methods in [CONTRACTS §5.2](CONTRACTS.md#52-backend-and-api).
+
 - In the mandatory part the backend is `Api` (`taskmaster/api.py`): same process, direct calls.
 - In the bonus the backend is `RemoteApi` (`taskmaster/client.py`): the same methods, over a UNIX socket.
 
 **Three programs**, one entry module each:
 
-| Program | Command | What runs |
-|---|---|---|
-| taskmaster | `python3 -m taskmaster.main CONFIG` | core in the main thread, shell in a second thread, `Api` between them |
-| taskmasterd (bonus) | `python3 -m taskmaster.daemon [-n] CONFIG` | core plus socket server; goes to the background unless `-n` is given |
+| Program               | Command                                      | What runs                                                                                                            |
+| --------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| taskmaster            | `python3 -m taskmaster.main CONFIG`          | core in the main thread, shell in a second thread, `Api` between them                                                |
+| taskmasterd (bonus)   | `python3 -m taskmaster.daemon [-n] CONFIG`   | core plus socket server; goes to the background unless `-n` is given                                                 |
 | taskmasterctl (bonus) | `python3 -m taskmaster.ctl [COMMAND [ARG…]]` | shell only, with `RemoteApi`; interactive with no arguments, otherwise one command and exit code 0 (ok) or 1 (error) |
 
 An invalid config, or another taskmaster already running, prints the error on stderr and exits with code 1. That is the only place where the program prints outside the shell, and it happens before any loop, thread or daemon exists.
 
 ## 4. Repository layout
 
-A file marked with an issue (T07, T16…) does not exist yet: that issue creates it.
+A file marked with an issue (T16, T19…) does not exist yet: that issue creates it.
 
 ```
 Taskmaster/
@@ -124,7 +129,7 @@ Taskmaster/
 │   │   ├── process.py           one instance: Popen, state machine (bonus: pty)
 │   │   ├── supervisor.py        instance table, commands, reap, deadlines, shutdown
 │   │   ├── reload.py            the diff between two configs
-│   │   ├── loop.py              (T07) event loop, signals, call queue
+│   │   ├── loop.py              event loop, signals, call queue
 │   │   └── logger.py            the log file (bonus: syslog)
 │   ├── shell/                   B
 │   │   ├── __init__.py
@@ -139,7 +144,7 @@ Taskmaster/
 ├── tests/                       unittest, one test_<module>.py per module
 │   ├── __init__.py
 │   └── fakes.py                 FakeBackend
-└── demo/                        (T11) test programs and demo configs; DEFENSE.md (T13)
+└── demo/                        test programs and demo configs; DEFENSE.md (T13)
 ```
 
 ## 5. Concurrency model
@@ -154,7 +159,7 @@ Signals and `signal.set_wakeup_fd` only work in the main thread, so the core mus
 class Loop:
     def run(self, sup):                               # main thread only
         signal.set_wakeup_fd(self._w)                 # every received signal writes its number (1 byte) to the pipe
-        for sig in (SIGCHLD, SIGHUP, SIGTERM, SIGINT):
+        for sig in (SIGCHLD, SIGHUP, SIGTERM, SIGINT, SIGQUIT):
             signal.signal(sig, lambda *_: None)       # empty handler; the loop does the work. Never SIG_IGN.
         self.sel.register(self._r, EVENT_READ, self._on_wakeup)   # signals and submitted calls both arrive here
         sup.autostart()
@@ -167,6 +172,7 @@ class Loop:
 ```
 
 **Calls from the shell.** `Loop.submit(fn, *args)` is the only way another thread talks to the core.
+
 - It puts the call on a `queue.SimpleQueue`, writes one `\0` byte to the wake-up pipe, and returns a `Future`. The loop runs the call on its own thread.
 - If the call raises, the loop logs it and the future holds `err(INTERNAL, ...)`. The shell never sees a traceback.
 - `submit` ignores a `BlockingIOError` on that write: it only means the pipe already holds wake-ups.
@@ -176,18 +182,20 @@ class Loop:
 - `run()` also forgets its thread when it returns. Otherwise the main thread would still count as "the loop thread", and a late `Api` call would reach the supervisor directly instead of failing with `BackendError` (the prototype hit this).
 
 **Deadlines.** Each instance has at most **one** active deadline:
+
 - the end of `starttime`, in STARTING;
 - the next retry, in BACKOFF;
 - the `SIGKILL`, in STOPPING.
 
 Deadlines use `time.monotonic()`, so a change of the wall clock does not affect them.
 
-| Signal received by taskmaster | Action |
-|---|---|
-| `SIGCHLD` | `sup.reap()` |
-| `SIGHUP` | `sup.reload()` |
-| `SIGTERM` | `sup.shutdown()` |
-| `SIGINT` | ignored when `interactive` (it is the shell's `Ctrl-C`); `sup.shutdown()` in the daemon |
+| Signal received by taskmaster | Action                                                                                             |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| `SIGCHLD`                     | `sup.reap()`                                                                                       |
+| `SIGHUP`                      | `sup.reload()`                                                                                     |
+| `SIGTERM`                     | `sup.shutdown()`                                                                                   |
+| `SIGQUIT`                     | `sup.shutdown()`, like `SIGTERM`: otherwise `Ctrl-\` would dump core and leave the children behind |
+| `SIGINT`                      | ignored when `interactive` (it is the shell's `Ctrl-C`); `sup.shutdown()` in the daemon            |
 
 **Reap.** Several children can die and produce a single `SIGCHLD`, so `reap()` polls **every** live process:
 
@@ -203,6 +211,7 @@ We never use `os.waitpid(-1, WNOHANG)`. With `Popen`, reaping must go through `P
 **Terminal.** `main.py` saves the terminal's `termios` before it starts the shell thread, and restores it when `Api.run()` returns. The shell thread may be in the middle of a readline line when the process exits, and a killed daemon thread cannot clean up after itself.
 
 **`Ctrl-C` in the shell**
+
 - In `taskmaster.main`, the signal goes to the core, which ignores it. The typed line stays.
 - In `taskmaster.ctl`, the `KeyboardInterrupt` in `input()` clears the line. While the shell waits for a reply, it ignores `Ctrl-C`, so that replies stay in sync.
 
@@ -237,19 +246,19 @@ stateDiagram-v2
     STOPPING --> STOPPED: died, with SIGKILL after stoptime if needed
 ```
 
-| From | Event | To | Action |
-|---|---|---|---|
-| STOPPED, EXITED, FATAL | `start` (command or autostart) | STARTING | `Popen`; deadline = now + `starttime`; reset attempts |
-| STARTING | deadline passes, process alive | RUNNING | reset attempts |
-| STARTING | dies, or `Popen` raised | BACKOFF | attempts += 1; deadline = now + attempts seconds (1 s, 2 s, 3 s…) |
-| STARTING | same, but 1 + `startretries` attempts already made | FATAL | log WARNING "gave up" |
-| BACKOFF | deadline passes | STARTING | `Popen` |
-| RUNNING | dies | EXITED | "expected" if the code is in `exitcodes`; a death by signal is never expected; log WARNING if unexpected |
-| EXITED | right away, if `autorestart: always`, or `unexpected` and the exit was unexpected | STARTING | `Popen` |
-| STARTING, RUNNING | `stop` | STOPPING | `os.killpg(pid, stopsignal)`; deadline = now + `stoptime` |
-| BACKOFF | `stop` | STOPPED | cancel the next attempt |
-| STOPPING | deadline passes | STOPPING | `os.killpg(pid, SIGKILL)`; log WARNING "killed after stoptime" |
-| STOPPING | dies | STOPPED | if a `restart` is pending, `start` |
+| From                   | Event                                                                             | To       | Action                                                                                                   |
+| ---------------------- | --------------------------------------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------- |
+| STOPPED, EXITED, FATAL | `start` (command or autostart)                                                    | STARTING | `Popen`; deadline = now + `starttime`; reset attempts                                                    |
+| STARTING               | deadline passes, process alive                                                    | RUNNING  | reset attempts                                                                                           |
+| STARTING               | dies, or `Popen` raised                                                           | BACKOFF  | attempts += 1; deadline = now + attempts seconds (1 s, 2 s, 3 s…)                                        |
+| STARTING               | same, but 1 + `startretries` attempts already made                                | FATAL    | log WARNING "gave up"                                                                                    |
+| BACKOFF                | deadline passes                                                                   | STARTING | `Popen`                                                                                                  |
+| RUNNING                | dies                                                                              | EXITED   | "expected" if the code is in `exitcodes`; a death by signal is never expected; log WARNING if unexpected |
+| EXITED                 | right away, if `autorestart: always`, or `unexpected` and the exit was unexpected | STARTING | `Popen`                                                                                                  |
+| STARTING, RUNNING      | `stop`                                                                            | STOPPING | `os.killpg(pid, stopsignal)`; deadline = now + `stoptime`                                                |
+| BACKOFF                | `stop`                                                                            | STOPPED  | cancel the next attempt                                                                                  |
+| STOPPING               | deadline passes                                                                   | STOPPING | `os.killpg(pid, SIGKILL)`; log WARNING "killed after stoptime"                                           |
+| STOPPING               | dies                                                                              | STOPPED  | if a `restart` is pending, `start`                                                                       |
 
 - Every transition is logged, with its reason.
 - A `ProcessLookupError` from `killpg` (the group is already gone) is ignored.
@@ -262,36 +271,42 @@ stateDiagram-v2
 1. Re-read the file given at startup and validate all of it. If it is invalid, log ERROR, reply `BAD_CONFIG`, and change nothing.
 2. `reload.diff(target, new)` compares the two, program by program (by name), and `target` becomes `new`.
 
-| Case | What happens |
-|---|---|
-| unchanged (`ProgramConfig` equal, field by field) | nothing, whatever the state (FATAL and STOPPED included) |
-| new | create the instances; start them if `autostart` |
-| removed | stop every instance; once all are stopped, delete them |
+| Case                                                     | What happens                                                           |
+| -------------------------------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| unchanged (`ProgramConfig` equal, field by field)        | nothing, whatever the state (FATAL and STOPPED included)               |
+| +                                                        | new                                                                    | create the instances; start them if autostart. If an old instance still holds one of the new names, wait for it first, as below |
+| removed                                                  | stop every instance; once all are stopped, delete them                 |
 | changed (any field, `autostart` and `numprocs` included) | like "removed" and, once the old instances are all stopped, like "new" |
 
 Stopping during a reload, by state:
+
 - STARTING or RUNNING become STOPPING (`stopsignal`, then `SIGKILL` after `stoptime`);
 - BACKOFF becomes STOPPED at once;
 - STOPPING keeps stopping;
 - STOPPED, EXITED and FATAL are already stopped.
 
 **Pending changes**
-- What waits is stored per program: `pending[name] = new config, or None if the program was removed`.
-- `tick()` applies it once all the old instances are stopped.
+
+- What waits is stored per program: `pending[name] = new config, or None if the program was removed`. Every program in the diff gets an entry, new ones included.
+- `reload()` and every `tick()` apply an entry once nothing it replaces is alive: the program's old instances, and any old instance that holds one of its new names.
+  - Most new programs are applied in the same call.
+  - A new program waits when it was removed by one reload and added back by the next before it stopped, or when it takes the name of another program's instance (`web_00` removed, `web` added with `numprocs: 2`). Creating it at once would replace a live `Process` and lose its child.
 - A second reload before that replaces the pending entry. It compares against `target`, which already holds the first reload's result.
-- While a program has a pending entry, `start` and `restart` on its instances return `BUSY`.
+- While a program has a pending entry, `start` and `restart` on its instances return `BUSY`, per instance, so `start all` still starts the other programs.
+- A shutdown drops every pending entry (§8).
 
 The reply is `ok({"added": [...], "changed": [...], "removed": [...]})`, and the log gets one line: `reload: added [...], changed [...], removed [...]`.
 
 ## 8. Shutdown
 
 A shutdown can come from:
+
 - the `shutdown` command;
 - `SIGTERM`;
 - `SIGINT` in the daemon;
 - `quit` or `Ctrl-D` in `taskmaster.main`.
 
-`Supervisor.shutdown()` replies `{"ok": true, "msg": "shutting down"}` right away. From then on, `start`, `restart` and `reload` return `BUSY`.
+`Supervisor.shutdown()` replies `{"ok": true, "msg": "shutting down"}` right away. From then on, `start`, `restart` and `reload` return `BUSY`. It also drops the pending reload entries (§7), so nothing new starts while everything stops.
 
 1. Stop every instance as `stop` does (`stopsignal`, then `SIGKILL` after `stoptime`), without blocking the loop.
 2. When no instance is alive, `sup.finished` becomes true and the loop ends. Then:
@@ -302,15 +317,17 @@ A shutdown can come from:
 ## 9. Logging and alerts
 
 **Log file** (`core/logger.py`)
+
 - Standard `logging` module, with a `FileHandler` on `taskmaster.log` in append mode, in the folder taskmaster was started from.
 - Level INFO, format `%(asctime)s %(levelname)s %(message)s`.
 - Only the core writes to the log, always from the main thread.
 - `setup()` can be called twice (tests do) without adding a second handler.
 
 **Events by level**
+
 - **INFO:** taskmaster started (with its pid) and stopped, spawn, entered RUNNING, expected exit, stop, restart, reload summary.
-- **WARNING:** unexpected exit (with the code or the signal), `SIGKILL` after `stoptime`, FATAL (gave up), invalid config on reload.
-- **ERROR:** an exception caught by the loop, with its traceback.
+- **WARNING:** unexpected exit (with the code or the signal), `SIGKILL` after `stoptime`, FATAL (gave up).
+- **ERROR:** an exception caught by the loop, with its traceback; an invalid config on reload (§7).
 
 **Bonus: alerts** ([§11.3](#113-alerts)).
 
@@ -452,12 +469,14 @@ def run(backend: Backend, *, shutdown_on_quit: bool) -> None: ...
 ### 11.2 Client and server
 
 **`python3 -m taskmaster.daemon [-n] CONFIG` (taskmasterd)**
+
 - It builds `Api(path, interactive=False)`, so config errors still reach the terminal. Then `Server(SOCKET_PATH, api)`, which refuses to start if another taskmaster answers on the socket.
 - Then it becomes a daemon unless `-n` is given: fork, `setsid`, fork again, `chdir("/")`, and stdin, stdout and stderr to `/dev/null`. The parents leave with `os._exit(0)`: a normal exit would run the cleanup and delete the socket that the daemon is using.
 - Finally `Server.start()` and `Api.run()`. When `run()` returns, `Server.close()` runs.
 - The server runs inside the core's loop, on the core's thread. For each request it calls the matching `Api` method, which takes the direct path (no thread hand-over).
 
 **`python3 -m taskmaster.ctl [COMMAND [ARG…]]` (taskmasterctl)**
+
 - It connects with `RemoteApi`. If the socket does not exist or refuses the connection, it prints "taskmasterd is not running" and exits with code 1.
 - With no arguments it runs the same `repl.run`, with `shutdown_on_quit=False`. With arguments it runs one command through `commands.execute`, prints the result, and exits with 0 (ok) or 1 (error).
 - If the connection drops mid-session, it prints a message and exits. It does not reconnect.
@@ -477,6 +496,7 @@ def run(backend: Backend, *, shutdown_on_quit: bool) -> None: ...
 Only for programs with `tty: true`. The handshake and the types are in [CONTRACTS §7](CONTRACTS.md#7-bonus-attach).
 
 **Core side (A)**
+
 - The program runs in a pty:
   - `master, slave = os.openpty()`, with a default size of 24×80 (`TIOCSWINSZ`);
   - `Popen` with `stdin=stdout=stderr=slave` and `start_new_session=True`;
@@ -492,6 +512,7 @@ Only for programs with `tty: true`. The handshake and the types are in [CONTRACT
 
   - Tested: without the trampoline, `Ctrl-C` never reaches the program. With it, the signal arrives, and the pid stays the same.
   - Side effect: a missing command no longer makes `Popen` raise. It shows up as a quick death (BACKOFF, then FATAL), with Python's error in the `stdout` file.
+
 - `master` is non-blocking and registered in the selector. The loop does **one** read of at most 64 KiB per ready event, never "until empty", so a program that floods its console cannot starve the loop. What it reads goes to three places:
   - the `stdout` file, if there is one;
   - a replay buffer with the last 4 KiB;
@@ -500,6 +521,7 @@ Only for programs with `tty: true`. The handshake and the types are in [CONTRACT
 - An `EIO` on read, or the death of the process, closes `master` and every attached sink.
 
 **Shell and server side (B)**
+
 - `Api.attach` and `RemoteApi.attach` follow the handshake in CONTRACTS §7. The server-side steps are the same for an accepted connection and for the socketpair that `Api` makes.
 - In the shell, `shell/attach.py` takes the `Channel` and:
   - writes `pending` to stdout first;
@@ -540,6 +562,7 @@ sequenceDiagram
    - the `Loop` and the `Supervisor` are built.
 
    Any error goes to stderr, with exit code 1.
+
 2. `main.py` saves `termios` and starts the shell thread (`repl.run(api, shutdown_on_quit=True)`). Calls from the shell wait in the loop's queue until the loop starts.
 3. `api.run()` calls `Loop.run(sup)`, which:
    - installs the signal handlers;
@@ -563,7 +586,7 @@ sequenceDiagram
 ### 12.4 Reload
 
 1. `SIGHUP` or the `reload` command calls `sup.reload()`, which loads the file. If the file is invalid, the reply is `BAD_CONFIG`.
-2. The supervisor computes the diff (§7), stops the changed and removed programs, fills `pending`, and creates and starts the new programs.
+2. The supervisor computes the diff (§7), stops the changed and removed programs, and gives every program in the diff a `pending` entry. Whatever waits for nothing, which is most new programs, is applied at once.
 3. On each `tick()`, a pending program whose old instances are all stopped gets replaced or deleted.
 
 ### 12.5 Shutdown
@@ -574,22 +597,23 @@ sequenceDiagram
 
 ## 13. Ownership and phases
 
-| | Person A (core) | Person B (interface) |
-|---|---|---|
-| Mandatory | `core/`: `config.py`, `process.py`, `supervisor.py`, `loop.py`, `reload.py`, `logger.py` | `shell/`: `commands.py`, `render.py`, `repl.py`; `api.py`; `main.py`; `demo/` |
-| Bonus | privileges and the pty (`process.py`), syslog (`logger.py`) | `server.py`, `client.py`, `daemon.py`, `ctl.py`, `shell/attach.py`, the wire format in `protocol.py` |
-| Shared | the skeleton, `docs/`, `protocol.py` (basics), `tests/fakes.py`, the defense rehearsal | |
+|           | Person A (core)                                                                          | Person B (interface)                                                                                 |
+| --------- | ---------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Mandatory | `core/`: `config.py`, `process.py`, `supervisor.py`, `loop.py`, `reload.py`, `logger.py` | `shell/`: `commands.py`, `render.py`, `repl.py`; `api.py`; `main.py`; `demo/`                        |
+| Bonus     | privileges and the pty (`process.py`), syslog (`logger.py`)                              | `server.py`, `client.py`, `daemon.py`, `ctl.py`, `shell/attach.py`, the wire format in `protocol.py` |
+| Shared    | the skeleton, `docs/`, `protocol.py` (basics), `tests/fakes.py`, the defense rehearsal   |                                                                                                      |
 
-| Phase | A | B | Done when |
-|---|---|---|---|
-| 1. Base | T03 config | T04 shell commands and rendering | T01 and T02 merged: contracts closed |
-| 2. Processes | T05 process, T06 supervisor, T07 loop | T08 REPL, T09 `Api` and `main.py` | `start` / `stop` / `status` work end to end |
-| 3. Robustness | review B's PRs, more tests | T10 completion, T11 demo programs | mandatory part minus reload |
-| 4. Reload | T12 reload | T13 defense rehearsal (with A) | **mandatory part complete**: rehearse the defense |
-| 5. Bonus | T14 privileges, T15 syslog | T16 socket server, T17 client and programs | bonus tested |
-| 6. Extra | T18 attach, core side | T19 attach, shell side | only if there is time left |
+| Phase         | A                                     | B                                          | Done when                                         |
+| ------------- | ------------------------------------- | ------------------------------------------ | ------------------------------------------------- |
+| 1. Base       | T03 config                            | T04 shell commands and rendering           | T01 and T02 merged: contracts closed              |
+| 2. Processes  | T05 process, T06 supervisor, T07 loop | T08 REPL, T09 `Api` and `main.py`          | `start` / `stop` / `status` work end to end       |
+| 3. Robustness | review B's PRs, more tests            | T10 completion, T11 demo programs          | mandatory part minus reload                       |
+| 4. Reload     | T12 reload                            | T13 defense rehearsal (with A)             | **mandatory part complete**: rehearse the defense |
+| 5. Bonus      | T14 privileges, T15 syslog            | T16 socket server, T17 client and programs | bonus tested                                      |
+| 6. Extra      | T18 attach, core side                 | T19 attach, shell side                     | only if there is time left                        |
 
 **The bonus only counts if the mandatory part is flawless.**
+
 - Do not start phase 5 with phase 4 half done.
 - The mandatory issues carry no bonus code. `user`, `tty` and `attach` only arrive with their bonus issues (T14, T18 and T19), so the mandatory part can be defended on its own.
 - A bonus PR is merged only after `python3 -m unittest` and the whole of `demo/DEFENSE.md` pass again on the VM.
@@ -597,12 +621,14 @@ sequenceDiagram
 ## 14. Testing
 
 **Setup**
+
 - Run the tests with `python3 -m unittest` from the repository root.
 - Tests use short-lived programs (`sh -c 'exit 1'`, `sleep 30`) and short times (`starttime: 0.2`).
 - Test code may sleep. The core may not.
 - A test that needs root, `/dev/log` or a pty skips itself when it is not available, so CI stays green.
 
 **Review focus.** These are the five failures most likely to bite during the defense. Each one has a test in the issue that owns the code.
+
 1. A program that can never start ends FATAL after exactly 1 + `startretries` attempts, with 1 s, 2 s… between them (T05).
 2. Several children dying at once, with a single `SIGCHLD`, are all reaped: no zombies, every state updated (T06).
 3. A reload leaves untouched programs on the same pid. An invalid file changes nothing (T12).
