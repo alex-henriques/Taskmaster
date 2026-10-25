@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import re
 import readline
 
@@ -50,22 +51,25 @@ def _complete_with(backend: Backend) -> None:
     readline.parse_and_bind("tab: complete")
 
 
+def _read_line() -> str | None:
+    """The next line, "" after Ctrl-C or bad input, None on Ctrl-D."""
+    try:
+        return input(PROMPT)
+    except KeyboardInterrupt:
+        print()
+    except UnicodeDecodeError:
+        print("***Invalid input: not UTF-8")
+    except EOFError:
+        print()
+        return None
+    return ""
+
+
 def run(backend: Backend, *, shutdown_on_quit: bool) -> None:
-    """Read lines until quit, Ctrl-D or a lost backend. The only place the shell prints."""
+    """Read lines until quit, Ctrl-D, a lost terminal or a lost backend. The only place the shell prints."""
     _complete_with(backend)
     try:
-        while True:
-            try:
-                line = input(PROMPT)
-            except KeyboardInterrupt:
-                print()
-                continue
-            except UnicodeDecodeError:
-                print("***Invalid input: not UTF-8")
-                continue
-            except EOFError:
-                print()
-                break
+        while (line := _read_line()) is not None:
             result = commands.execute(line, backend)
             if result.text:
                 print(result.text)
@@ -75,3 +79,7 @@ def run(backend: Backend, *, shutdown_on_quit: bool) -> None:
             print(render.results(backend.shutdown()))
     except BackendError as e:
         print(e)
+    except OSError:
+        if shutdown_on_quit:
+            with contextlib.suppress(BackendError):
+                backend.shutdown()

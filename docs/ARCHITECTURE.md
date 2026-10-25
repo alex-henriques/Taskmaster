@@ -593,7 +593,7 @@ sequenceDiagram
 
 1. The trigger is `quit` or `Ctrl-D` (in `taskmaster.main`), the `shutdown` command or `SIGTERM`. It calls `sup.shutdown()`, which replies at once and stops everything.
 2. After `quit`, the shell thread returns. The main thread keeps looping, so `SIGKILL` deadlines still fire.
-3. When nothing is alive, `sup.finished` becomes true and `Api.run()` returns 0. `main.py` restores the terminal and the process exits, taking the daemon shell thread with it.
+3. When nothing is alive, `sup.finished` becomes true and `Api.run()` returns 0. `main.py` waits up to 0.5 s for the shell thread (a daemon thread still printing at interpreter exit makes Python abort), restores the terminal even if that wait is interrupted, and the process exits, taking the daemon shell thread with it.
 
 ## 13. Ownership and phases
 

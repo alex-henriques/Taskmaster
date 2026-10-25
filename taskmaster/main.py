@@ -19,14 +19,18 @@ def main(argv: list[str]) -> int:
         print(f"taskmaster: {e}", file=sys.stderr)
         return 1
     saved = termios.tcgetattr(sys.stdin) if sys.stdin.isatty() else None
-    threading.Thread(
+    shell = threading.Thread(
         target=repl.run, args=(api,), kwargs={"shutdown_on_quit": True}, daemon=True
-    ).start()
+    )
+    shell.start()
     try:
         return api.run()
     finally:
-        if saved is not None:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, saved)
+        try:
+            shell.join(timeout=0.5)
+        finally:
+            if saved is not None:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, saved)
 
 
 if __name__ == "__main__":

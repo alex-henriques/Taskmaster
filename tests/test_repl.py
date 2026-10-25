@@ -8,6 +8,7 @@ import sys
 import time
 import traceback
 import unittest
+from unittest import mock
 
 from taskmaster.protocol import BackendError
 from taskmaster.shell import commands, repl
@@ -166,6 +167,16 @@ class ReplTest(unittest.TestCase):
         self.prompts(1)
         self.type(b"quit\r")
         self.assertIn("gone", self.finish())
+
+    def test_lost_terminal_still_shuts_down(self) -> None:
+        # a closed terminal: input() sees EOF, then every print() fails with EIO
+        backend = FakeBackend()
+        with (
+            mock.patch("builtins.input", side_effect=EOFError),
+            mock.patch("builtins.print", side_effect=OSError(5, "Input/output error")),
+        ):
+            repl.run(backend, shutdown_on_quit=True)
+        self.assertEqual([c[0] for c in backend.calls], ["shutdown"])
 
     def test_bad_input_does_not_crash(self) -> None:
         self.spawn(FakeBackend())
