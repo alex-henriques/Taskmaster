@@ -29,6 +29,8 @@ make install                         # create .venv with PyYAML (and ruff, for t
 make run CONFIG=path/to/config.yaml  # start Taskmaster with your config file
 make test                            # run the tests
 make clean                           # delete .venv, caches and taskmaster.log
+make daemon CONFIG=path/to/config.yaml  # start the daemon (add -n inside CONFIG to stay in the foreground)
+make ctl ARGS=status                    # talk to a running daemon; no ARGS opens the shell
 ```
 
 Everything is installed inside the project folder, in `.venv`, so the Python
