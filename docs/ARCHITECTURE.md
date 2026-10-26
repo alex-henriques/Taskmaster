@@ -144,7 +144,7 @@ Taskmaster/
 ├── tests/                       unittest, one test_<module>.py per module
 │   ├── __init__.py
 │   └── fakes.py                 FakeBackend
-└── demo/                        test programs and demo configs; DEFENSE.md (T13)
+└── demo/                        test programs and demo configs (bonus.yaml: T14); DEFENSE.md (T13)
 ```
 
 ## 5. Concurrency model
@@ -321,7 +321,7 @@ A shutdown can come from:
 - Standard `logging` module, with a `FileHandler` on `taskmaster.log` in append mode, in the folder taskmaster was started from.
 - Level INFO, format `%(asctime)s %(levelname)s %(message)s`.
 - Only the core writes to the log, always from the main thread.
-- `setup()` can be called twice (tests do) without adding a second handler.
+- A second call to `setup()` (tests do it, and so does a second `Api`) starts over: it removes every old handler, the syslog one included, so nothing is logged twice.
 
 **Events by level**
 
@@ -464,7 +464,8 @@ def run(backend: Backend, *, shutdown_on_quit: bool) -> None: ...
   - Any other `user` counts as a spawn error. It ends in FATAL with the message "user switching needs root".
 - The environment (`HOME`, `USER`) does not change, as in supervisor.
 - **Files owned by root:** the socket is `0600` and owned by root. The `stdout` and `stderr` files are created by root before the user switch.
-- **Proof for the defense:** `ps -o user,pid,cmd`, or the `Uid` and `Gid` lines of `/proc/<pid>/status`.
+- **The user is checked before those files are opened**, so a refused switch leaves no file behind. With `fs.protected_regular` (on by default on Ubuntu), root and a normal user cannot reopen each other's files in `/tmp`, and a `Permission denied` would hide "user switching needs root" (tested).
+- **Proof for the defense:** `ps -o user,pid,cmd`, or the `Uid`, `Gid` and `Groups` lines of `/proc/<pid>/status`. `Groups` shows that root's group `0` did not leak.
 
 ### 11.2 Client and server
 
@@ -490,6 +491,7 @@ def run(backend: Backend, *, shutdown_on_quit: bool) -> None: ...
 - A second log handler: `logging.handlers.SysLogHandler(address="/dev/log")`, with level WARNING and `ident = "taskmaster: "`. `logger.add_syslog(log)` adds it.
 - During the defense, show it with `journalctl -t taskmaster -f`.
 - If `/dev/log` does not exist, taskmaster keeps running without syslog and logs one warning to the file.
+  - `add_syslog` checks this itself with `os.path.exists`. `SysLogHandler` never raises when the socket is missing (3.10 and 3.14 alike), and then prints a `--- Logging error ---` traceback on the terminal for every record (tested).
 
 ### 11.4 Attach and detach
 

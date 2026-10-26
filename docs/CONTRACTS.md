@@ -107,7 +107,7 @@ The format is the one in the subject's example (VII.1): a top-level `programs:` 
 | `stoptime` | seconds ≥ 0 (int or float) | 10 | |
 | `stdout`, `stderr` | path | discarded | opened in append mode; without the field, output goes to `/dev/null` |
 | `env` | map of name → string or int | `{}` | merged over taskmaster's own environment; an int is converted with `str()` |
-| `user` (bonus, T14) | user name | unchanged | needs root; until T14 is merged it is an unknown field |
+| `user` (bonus, T14) | user name | unchanged | switching needs root; without root only taskmaster's own user is accepted |
 | `tty` (bonus, T18) | bool | `false` | run in a pty so it can be attached; stdout and stderr both go to `stdout`; until T18 is merged it is an unknown field |
 
 **Validation.** An invalid file is refused at startup. On reload the whole file is ignored ([ARCHITECTURE §7](ARCHITECTURE.md#7-reload)).

@@ -1,0 +1,11 @@
+programs:
+  nobody:
+    cmd: "demo/programs/whoami.sh"
+    user: nobody
+    autorestart: never
+    startretries: 0
+    stdout: /tmp/taskmaster-nobody.out
+
+  forever:
+    cmd: "demo/programs/forever.sh"
+    autorestart: always

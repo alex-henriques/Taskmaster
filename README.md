@@ -68,6 +68,7 @@ error, and the message names the exact path, such as
 | `env` | `{}` | Variables added to the environment the program inherits from Taskmaster. Values are strings or integers; quote anything else, such as `"true"`. |
 | `workingdir` | inherited | Directory to run the program in. |
 | `umask` | inherited | Umask of the program, such as `022`. Keep the leading `0` or use quotes (`"022"`): a plain `22` is read as a decimal number. |
+| `user` | unchanged | Bonus. Run the program as this user. Taskmaster must run as root for that; without root only your own user is accepted, and any other makes the program FATAL. |
 
 ## Using it
 
@@ -87,6 +88,7 @@ and its programs keep running, and the line you are typing stays (`Ctrl-U`
 clears it). On reload, programs whose settings did not
 change are left alone, and a file with an error is refused as a whole, so
 nothing changes. Everything that happens is written to `taskmaster.log`.
+Warnings and errors (unexpected exits, FATAL, `SIGKILL` after `stoptime`, an invalid reload) also go to syslog: `journalctl -t taskmaster -f`.
 
 
 ## Documentation

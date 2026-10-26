@@ -565,14 +565,110 @@ Delete `demo/ghost.yaml` afterwards. The main taskmaster can be started again wi
 **show** every config option is documented, with its default and an example:
 `cmd`, `numprocs`, `autostart`, `autorestart`, `exitcodes`, `startretries`,
 `starttime`, `stopsignal`, `stoptime`, `stdout`, `stderr`, `env`, `workingdir`,
-`umask`. Also the signals (`SIGHUP` reloads, `SIGTERM` and `SIGQUIT` shut down).
+`umask`, and the bonus `user`. Also the signals (`SIGHUP` reloads, `SIGTERM` and `SIGQUIT` shut down).
 
-## 10. Finish
+## 10. Bonus
+
+Only once everything above has passed: the bonus only counts if the mandatory
+part is flawless.
+
+### 10.1 Alerts through syslog
+
+Since §0, every WARNING and ERROR has also gone to syslog, not only to
+`taskmaster.log`.
+
+**do** (T2)
+
+```bash
+journalctl -t taskmaster --since today --no-pager
+journalctl -t taskmaster --since today -p info..info --no-pager     # -- No entries --
+```
+
+**show**
+- The session's alerts are all there: `crash` and `ghost` FATAL, the unexpected
+  exits of `exit_unexpected` and of the `kill -9`s, `stubborn: killed after
+  stoptime`, and the invalid reload of §8.3.
+- Not one INFO line: no spawn, no `-> RUNNING`, no reload summary.
+
+**do** (T3) `Ctrl-C` the `tail`, then keep this open for §10.2:
+
+```bash
+journalctl -t taskmaster -f
+```
+
+**say** "It is a second handler on the same logger, at WARNING, with
+`ident = "taskmaster: "`, which is what `-t` filters on. Without `/dev/log`,
+taskmaster keeps running and writes one warning to its own file; a unit test
+covers that case."
+
+### 10.2 Run a program as another user
+
+`demo/bonus.yaml` runs `whoami.sh` as `nobody`, next to a plain `forever`.
+Switching users needs root, so we run it twice: without `sudo`, then with it.
+
+**do** (T2) `nobody` must be able to reach the scripts inside our home:
+
+```bash
+stat -c %a ~               # 750 or 700: nobody can't get in
+chmod o+x ~                # others may go through it, not list it; undone in §11
+```
+
+**do** (T1) first without root (`quit` the running taskmaster first, if any):
+
+```
+.venv/bin/python3 -m taskmaster.main demo/bonus.yaml
+status
+quit
+```
+
+**show**
+- `nobody` is FATAL with `user switching needs root`, and `forever` is RUNNING.
+- T3 shows the FATAL line as it happens.
+- T2: `ls /tmp/taskmaster-nobody.out` says `No such file or directory`: the
+  user is checked before any output file is created.
+
+**do** (T1) now as root:
+
+```
+sudo .venv/bin/python3 -B -m taskmaster.main demo/bonus.yaml
+status                     # note the pid of nobody
+```
+
+**do** (T2)
+
+```bash
+head -1 /tmp/taskmaster-nobody.out
+ps -o user,pid,cmd -u nobody
+grep -E '^(Uid|Gid|Groups)' /proc/<pid of nobody>/status
+ls -l /tmp/taskmaster-nobody.out
+```
+
+**show**
+- `uid=65534(nobody) gid=65534(nogroup) groups=65534(nogroup)`.
+- `ps` shows `nobody … sleep 3600`. In `/proc`, the Uid, Gid and Groups lines
+  only have `65534`: root's group `0` did not leak.
+- The output file belongs to root: taskmaster opens it before the switch, and
+  the child inherits the open file.
+
+**say**
+- "As root, `Popen` gets `user`, `group` and `extra_groups`, so the child calls
+  `setgroups`, `setgid` and `setuid`, in that order, right before `exec`.
+  Without root even `setgroups` to yourself fails, so another user is refused
+  with a clear error, and your own user is simply ignored."
+- If the grader points at `USER=root` and `HOME=/root` further down the file:
+  "On purpose, like supervisor: we switch the ids, not the environment."
+
+`-B` stops root from writing `.pyc` files into the clone. `quit` in T1 when done.
+
+## 11. Final Cleanup
 
 ```bash
 # T2
 grep -ci traceback taskmaster.log          # 0
 ps aux | grep -E "forever|stubborn|sleep 3600|yes" | grep -v grep   # nothing
-rm -f demo/live.yaml demo/ghost.yaml /tmp/taskmaster-*.out /tmp/taskmaster-*.err
+find . -path ./.venv -prune -o -user root -print                    # nothing: -B worked
+rm -f demo/live.yaml demo/ghost.yaml
+sudo rm -f /tmp/taskmaster-*
+chmod o-x ~                                # only if §10.2 changed it
 git status                                 # clean
 ```
