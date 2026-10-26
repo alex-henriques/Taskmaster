@@ -71,6 +71,7 @@ error, and the message names the exact path, such as
 | `workingdir` | inherited | Directory to run the program in. |
 | `umask` | inherited | Umask of the program, such as `022`. Keep the leading `0` or use quotes (`"022"`): a plain `22` is read as a decimal number. |
 | `user` | unchanged | Bonus. Run the program as this user. Taskmaster must run as root for that; without root only your own user is accepted, and any other makes the program FATAL. |
+| `tty` | `false` | Bonus. Run the program in a pseudo-terminal, so it can be attached to. Both its output streams go to `stdout`; setting `stderr` as well is an error. |
 
 ## Using it
 
