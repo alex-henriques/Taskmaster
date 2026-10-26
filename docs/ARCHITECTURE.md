@@ -472,7 +472,8 @@ def run(backend: Backend, *, shutdown_on_quit: bool) -> None: ...
 **`python3 -m taskmaster.daemon [-n] CONFIG` (taskmasterd)**
 
 - It builds `Api(path, interactive=False)`, so config errors still reach the terminal. Then `Server(SOCKET_PATH, api)`, which refuses to start if another taskmaster answers on the socket.
-- Then it becomes a daemon unless `-n` is given: fork, `setsid`, fork again, `chdir("/")`, and stdin, stdout and stderr to `/dev/null`. The parents leave with `os._exit(0)`: a normal exit would run the cleanup and delete the socket that the daemon is using.
+- Then it becomes a daemon unless `-n` is given: fork, `setsid`, fork again, and stdin, stdout and stderr to `/dev/null`. The parents leave with `os._exit(0)`: a normal exit would run the cleanup and delete the socket that the daemon is using.
+  - There is no `chdir("/")`: a program's `cmd` is relative to the directory taskmasterd was started from (`demo/programs/forever.sh` in the demo configs), and `Popen` inherits the daemon's cwd. With `chdir("/")` every such program ends in BACKOFF with `No such file or directory` (tested). The config path is made absolute with `os.path.abspath`, so reload still works.
 - Finally `Server.start()` and `Api.run()`. When `run()` returns, `Server.close()` runs.
 - The server runs inside the core's loop, on the core's thread. For each request it calls the matching `Api` method, which takes the direct path (no thread hand-over).
 
