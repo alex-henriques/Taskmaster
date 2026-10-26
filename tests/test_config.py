@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import pwd
 import signal
 import tempfile
 import unittest
@@ -70,8 +71,7 @@ class ConfigTest(unittest.TestCase):
             ("programs: {web: {cmd: ls, env: {DEBUG: yes}}}", "programs.web.env"),
             ("programs: {web: {cmd: ls, env: {V: 3.10}}}", "programs.web.env"),
             ('programs: {web: {cmd: "echo \'oops"}}', "programs.web.cmd"),
-            # refused as an unknown field until T14 replaces this case
-            ("programs: {web: {cmd: ls, user: nobody}}", "programs.web.user"),
+            ("programs: {web: {cmd: ls, user: nosuchuser}}", "programs.web.user"),
             (
                 "programs: {web: {cmd: ls, numprocs: 2}, web_01: {cmd: ls}}",
                 "programs.web_01",
@@ -93,6 +93,11 @@ class ConfigTest(unittest.TestCase):
     def test_relative_paths(self) -> None:
         configs = self.load_text("programs: {a: {cmd: ls, stdout: logs/x.out}}")
         self.assertEqual(configs["a"].stdout, os.path.join(self.dir, "logs", "x.out"))
+
+    def test_user(self) -> None:
+        name = pwd.getpwuid(os.getuid()).pw_name
+        configs = self.load_text("programs: {a: {cmd: ls, user: " + name + "}}")
+        self.assertEqual(configs["a"].user, name)
 
     def test_equality(self) -> None:
         first, second = load(SUBJECT), load(SUBJECT)

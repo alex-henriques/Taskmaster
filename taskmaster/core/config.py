@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 import os
+import pwd
 import re
 import shlex
 import signal
@@ -31,6 +32,7 @@ class ProgramConfig:
     stdout: str | None = None
     stderr: str | None = None
     env: tuple[tuple[str, str], ...] = ()
+    user: str | None = None
 
     def instance_names(self) -> list[str]:
         if self.numprocs == 1:
@@ -111,6 +113,14 @@ def _env(value) -> tuple[tuple[str, str], ...]:
     return tuple(sorted((key, str(val)) for key, val in value.items()))
 
 
+def _user(value) -> str:
+    try:
+        pwd.getpwnam(value)
+    except KeyError:
+        raise ValueError("no such user") from None
+    return value
+
+
 _FIELDS = {
     "cmd": _cmd,
     "numprocs": lambda v: _int(v, 1),
@@ -126,6 +136,7 @@ _FIELDS = {
     "stdout": _path,
     "stderr": _path,
     "env": _env,
+    "user": _user,
 }
 _PATHS = ("workingdir", "stdout", "stderr")
 _NAME = re.compile(r"[A-Za-z0-9_-]+")
