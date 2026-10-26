@@ -13,4 +13,3 @@ programs:
   echo:
     cmd: "demo/programs/echo.sh"
     tty: true
-    stdout: /tmp/taskmaster-echo.out
