@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import signal
 import socket
+import threading
 
 from taskmaster.protocol import (
     SOCKET_PATH,
@@ -25,7 +27,13 @@ def _connect(path: str) -> socket.socket:
 
 
 def _exchange(sock: socket.socket, lines: LineBuffer, request: dict) -> dict:
-    """Send one request line, read until one reply line is complete."""
+    """Send one request line, read until one reply line is complete.
+
+    Ctrl-C is ignored meanwhile: a reply left unread would answer the next request.
+    """
+    main = threading.current_thread() is threading.main_thread()
+    if main:
+        old = signal.signal(signal.SIGINT, lambda *_: None)  # never SIG_IGN
     try:
         sock.sendall(encode(request))
         while (reply := lines.next_message()) is None:
@@ -35,6 +43,9 @@ def _exchange(sock: socket.socket, lines: LineBuffer, request: dict) -> dict:
             lines.feed(data)
     except (OSError, ProtocolError):
         raise BackendError(LOST) from None
+    finally:
+        if main:
+            signal.signal(signal.SIGINT, old)
     return reply
 
 

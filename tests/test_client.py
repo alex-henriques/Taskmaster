@@ -3,15 +3,17 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import signal
 import socket
 import tempfile
 import threading
+import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 
 from taskmaster.api import Api
 from taskmaster.client import RemoteApi
-from taskmaster.protocol import BAD_NAME, NOT_TTY, BackendError
+from taskmaster.protocol import BAD_NAME, NOT_TTY, BackendError, encode, ok
 from taskmaster.server import Server
 
 CONFIG = """\
@@ -177,6 +179,33 @@ class RemoteApiTest(unittest.TestCase):
         self.addCleanup(remote.close)
         with self.assertRaisesRegex(BackendError, "connection to taskmasterd lost"):
             remote.status([])
+
+    def test_ctrl_c_while_waiting_keeps_the_reply(self) -> None:
+        listener = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        self.addCleanup(listener.close)
+        listener.bind(self.path)
+        listener.listen()
+
+        def reply_after_ctrl_c() -> None:
+            conn, _ = listener.accept()
+            with conn:
+                conn.recv(4096)
+                os.kill(os.getpid(), signal.SIGINT)
+                time.sleep(0.2)
+                conn.sendall(encode(ok(msg="mine")))
+
+        thread = threading.Thread(target=reply_after_ctrl_c)
+        thread.start()
+        self.addCleanup(thread.join)
+        remote = RemoteApi(self.path)
+        self.addCleanup(remote.close)
+        before = signal.getsignal(signal.SIGINT)
+        try:
+            reply = remote.status([])
+        except KeyboardInterrupt:
+            self.fail("Ctrl-C cut the request short")
+        self.assertEqual(reply, ok(msg="mine"))
+        self.assertIs(signal.getsignal(signal.SIGINT), before)
 
 
 if __name__ == "__main__":
