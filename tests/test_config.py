@@ -53,6 +53,8 @@ class ConfigTest(unittest.TestCase):
             stdout=None,
             stderr=None,
             env=(),
+            user=None,
+            tty=False,
         )
         self.assertEqual(self.load_text("programs: {a: {cmd: ls}}"), {"a": expected})
 
@@ -78,6 +80,10 @@ class ConfigTest(unittest.TestCase):
             ),
             ("programs: {web: {cmd: ls, stoptime: .inf}}", "programs.web.stoptime"),
             ("programs: {web: {cmmd: ls}}", "programs.web.cmmd"),
+            (
+                "programs: {web: {cmd: ls, tty: true, stderr: x.err}}",
+                "programs.web.tty",
+            ),
         ]
         for text, prefix in cases:
             with self.subTest(text):
@@ -98,6 +104,10 @@ class ConfigTest(unittest.TestCase):
         name = pwd.getpwuid(os.getuid()).pw_name
         configs = self.load_text("programs: {a: {cmd: ls, user: " + name + "}}")
         self.assertEqual(configs["a"].user, name)
+
+    def test_tty(self) -> None:
+        configs = self.load_text("programs: {a: {cmd: ls, tty: true}}")
+        self.assertIs(configs["a"].tty, True)
 
     def test_equality(self) -> None:
         first, second = load(SUBJECT), load(SUBJECT)

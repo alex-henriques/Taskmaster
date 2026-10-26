@@ -9,3 +9,7 @@ programs:
   forever:
     cmd: "demo/programs/forever.sh"
     autorestart: always
+
+  echo:
+    cmd: "demo/programs/echo.sh"
+    tty: true

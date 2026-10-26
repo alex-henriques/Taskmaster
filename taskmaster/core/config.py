@@ -33,6 +33,7 @@ class ProgramConfig:
     stderr: str | None = None
     env: tuple[tuple[str, str], ...] = ()
     user: str | None = None
+    tty: bool = False
 
     def instance_names(self) -> list[str]:
         if self.numprocs == 1:
@@ -137,6 +138,7 @@ _FIELDS = {
     "stderr": _path,
     "env": _env,
     "user": _user,
+    "tty": _bool,
 }
 _PATHS = ("workingdir", "stdout", "stderr")
 _NAME = re.compile(r"[A-Za-z0-9_-]+")
@@ -157,6 +159,8 @@ def _program(name: str, raw, base: str) -> ProgramConfig:
             raise ConfigError(f"{where}.{field}: {e}") from None
     if "cmd" not in values:
         raise ConfigError(f"{where}.cmd: is required")
+    if values.get("tty") and "stderr" in values:
+        raise ConfigError(f"{where}.tty: cannot be used with stderr")
     for field in _PATHS:
         if field in values:
             values[field] = os.path.join(base, values[field])

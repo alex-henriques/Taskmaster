@@ -355,9 +355,9 @@ status                     # note the pids of whoami and forever_00
 
 ```bash
 head -3 /tmp/taskmaster-whoami.out
-grep Umask /proc/$(pgrep -f whoami.sh)/status
-ls -l /proc/$(pgrep -f whoami.sh)/cwd
-tr '\0' '\n' < /proc/$(pgrep -f whoami.sh)/environ | grep -E 'GREETING|ANSWER'
+grep Umask /proc/$(pgrep -fx 'sleep 3600')/status
+ls -l /proc/$(pgrep -fx 'sleep 3600')/cwd
+tr '\0' '\n' < /proc/$(pgrep -fx 'sleep 3600')/environ | grep -E 'GREETING|ANSWER'
 PID=12345    # the pid of forever_00 from status
 
 grep Umask /proc/$PID/status
@@ -372,8 +372,9 @@ tr '\0' '\n' < /proc/$PID/environ | grep STARTED_BY
 - `forever_00` says `Umask: 0022` and has `STARTED_BY=taskmaster`.
 
 `whoami.sh` ends with `exec sleep 3600`, so it keeps the pid taskmaster
-started, but its command line becomes `sleep 3600`. That's why we use the pid
-from `status` and not `pgrep -f whoami.sh`.
+started, but its command line becomes `sleep 3600`. That's why `pgrep -f
+whoami.sh` finds nothing, and we look for `sleep 3600` instead: at this point
+`whoami` is the only program running it.
 
 
 ## 7. The grader's own tests
@@ -567,7 +568,7 @@ Delete `demo/ghost.yaml` afterwards. The main taskmaster can be started again wi
 **show** every config option is documented, with its default and an example:
 `cmd`, `numprocs`, `autostart`, `autorestart`, `exitcodes`, `startretries`,
 `starttime`, `stopsignal`, `stoptime`, `stdout`, `stderr`, `env`, `workingdir`,
-`umask`, and the bonus `user`. Also the signals (`SIGHUP` reloads, `SIGTERM` and `SIGQUIT` shut down).
+`umask`, and the bonus `user` and `tty`. Also the signals (`SIGHUP` reloads, `SIGTERM` and `SIGQUIT` shut down).
 
 ## 10. Bonus
 
