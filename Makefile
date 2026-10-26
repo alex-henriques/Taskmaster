@@ -1,7 +1,7 @@
 VENV   := .venv
 PYTHON := $(VENV)/bin/python3
 
-.PHONY: install run test clean
+.PHONY: install run daemon ctl test clean
 
 install: $(VENV)
 
@@ -13,6 +13,12 @@ $(VENV): requirements.txt
 
 run: $(VENV)
 		$(PYTHON) -m taskmaster.main $(CONFIG)
+
+daemon: $(VENV)
+		$(PYTHON) -m taskmaster.daemon $(CONFIG)
+
+ctl: $(VENV)
+		$(PYTHON) -m taskmaster.ctl $(ARGS)
 
 test: $(VENV)
 		$(PYTHON) -m unittest

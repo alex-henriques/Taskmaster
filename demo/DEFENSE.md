@@ -663,12 +663,96 @@ ls -l /tmp/taskmaster-nobody.out
 
 `-B` stops root from writing `.pyc` files into the clone. `quit` in T1 when done.
 
+### 10.3 A daemon and a control program
+
+`taskmaster.daemon` owns the processes and listens on `/tmp/taskmaster.sock`.
+`taskmaster.ctl` is the same shell, over the socket. Stop the other taskmaster
+first (`quit` in T1, and `ls /tmp/taskmaster.sock` must fail).
+
+**do** (T2) with nothing running:
+
+```bash
+.venv/bin/python3 -m taskmaster.ctl status; echo "exit code: $?"
+```
+
+**show** `taskmasterd is not running`, and exit code 1. (Through `make` the code
+would be 2: that is `make`'s own failure code.)
+
+**do** (T1)
+
+```bash
+make daemon CONFIG=demo/live.yaml     # returns to the prompt at once
+make ctl ARGS=status                  # forever_00 and forever_01 RUNNING
+```
+
+**do** (T2)
+
+```bash
+ls -l /tmp/taskmaster.sock
+ps -o pid,ppid,sid,tty,cmd -p $(pgrep -f -- '-m taskmaster\.daemon')
+.venv/bin/python3 -m taskmaster.daemon demo/live.yaml; echo "exit code: $?"
+```
+
+**show**
+- The socket is `srw-------`: only our user can talk to the daemon.
+- The daemon has TTY `?`, its own SID, and PPID 1 (on a desktop it can be the
+  pid of `systemd --user`: the nearest process that adopts orphans).
+- The second `make daemon` prints `taskmasterd: taskmaster is already running`
+  and exits with 1.
+
+**say** "Fork, `setsid`, fork again: the first fork lets the shell return,
+`setsid` drops the terminal, and the second fork makes sure the daemon can
+never get one back. The parents leave with `os._exit`, because a normal exit
+would run the cleanup and delete the socket that the daemon is using. There is
+no `chdir("/")`: the `cmd` of our demo programs is relative to this folder."
+
+**do** two clients at once. (T1) `make ctl`, then stay in its prompt. (T2):
+
+```bash
+make ctl ARGS=status
+.venv/bin/python3 -m taskmaster.ctl start nope; echo "exit code: $?"
+make ctl ARGS="stop forever"
+```
+
+**show** T2 answers while T1 is open, and T1's `status` sees what T2 did. The
+unknown name prints `ERROR (no such process: nope)` and exits with 1; a command
+that works exits with 0.
+
+**do** (T2) reload through the signal, then the shutdown:
+
+```bash
+kill -HUP $(pgrep -f -- '-m taskmaster\.daemon')
+grep -E 'SIGHUP|reload' taskmaster.log | tail -2       # received SIGHUP, reload: added [], ...
+make ctl ARGS=shutdown
+ls /tmp/taskmaster.sock                                # No such file or directory
+ps aux | grep -E "forever|stubborn" | grep -v grep     # nothing
+```
+
+**show** (T1) type `status`: the shell prints `connection to taskmasterd lost`
+and exits. It does not reconnect. The daemon is gone, the socket file with it.
+
+**do** (T1) the foreground mode:
+
+```bash
+make daemon CONFIG="-n demo/live.yaml"      # stays here, no prompt
+```
+
+(T2) `make ctl ARGS=status` works. Then `Ctrl-C` in T1.
+
+**show** the daemon stops everything and leaves; `ls /tmp/taskmaster.sock`
+fails. `Ctrl-C` shuts the daemon down because without a shell it's the only way to stop it in this mode.
+
+**say** "The client never blocks the core: the daemon writes to each client
+through a queue, and a client that disconnects only closes its own connection."
+
 ## 11. Final Cleanup
 
 ```bash
 # T2
 grep -ci traceback taskmaster.log          # 0
 ps aux | grep -E "forever|stubborn|sleep 3600|yes" | grep -v grep   # nothing
+pgrep -af -- '-m taskmaster\.daemon'       # nothing
+ls /tmp/taskmaster.sock                    # No such file or directory
 find . -path ./.venv -prune -o -user root -print                    # nothing: -B worked
 rm -f demo/live.yaml demo/ghost.yaml
 sudo rm -f /tmp/taskmaster-*
