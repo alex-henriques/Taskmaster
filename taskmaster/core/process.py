@@ -2,16 +2,27 @@ from __future__ import annotations
 
 import contextlib
 import enum
+import fcntl
 import logging
 import os
 import pwd
 import selectors
 import signal
+import struct
 import subprocess
+import sys
+import termios
 import time
 
 from taskmaster.core.config import ProgramConfig
-from taskmaster.protocol import ALREADY_STARTED, BUSY, NOT_RUNNING, err, ok
+from taskmaster.protocol import ALREADY_STARTED, BUSY, NOT_RUNNING, Sink, err, ok
+
+APPEND = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+
+CTTY = (
+    "import fcntl, os, sys, termios; fcntl.ioctl(0, termios.TIOCSCTTY, 0); "
+    "os.execvp(sys.argv[1], sys.argv[1:])"
+)
 
 
 class State(enum.Enum):
@@ -46,6 +57,10 @@ class Process:
         self.exit: int | str | None = None
         self.error: str | None = None
         self.restart_pending = False
+        self.master: int | None = None
+        self.out: int | None = None
+        self.sinks: set[Sink] = set()
+        self.replay = b""
 
     def is_alive(self) -> bool:
         return self.popen is not None
@@ -103,6 +118,9 @@ class Process:
             return
         code = self.popen.returncode
         self.popen = None
+        if self.master is not None:
+            self._on_output(self.master, selectors.EVENT_READ)
+        self._close_tty()
         try:
             self.exit = signal.Signals(-code).name if code < 0 else code
         except ValueError:
@@ -141,25 +159,92 @@ class Process:
         try:
             creds = self._credentials()
             with contextlib.ExitStack() as files:
-                stdout = stderr = subprocess.DEVNULL
-                if cfg.stdout:
+                argv = cfg.cmd
+                stdin = stdout = stderr = subprocess.DEVNULL
+                if cfg.tty:
+                    argv = (sys.executable, "-I", "-c", CTTY, *cfg.cmd)
+                    stdin = stdout = stderr = self._open_tty(files)
+                elif cfg.stdout:
                     stdout = files.enter_context(open(cfg.stdout, "ab"))
                 if cfg.stderr:
                     stderr = files.enter_context(open(cfg.stderr, "ab"))
                 self.popen = subprocess.Popen(
-                    cfg.cmd,
+                    argv,
                     cwd=cfg.workingdir,
                     env={**os.environ, **dict(cfg.env)},
                     umask=-1 if cfg.umask is None else cfg.umask,
-                    stdin=subprocess.DEVNULL,
+                    stdin=stdin,
                     stdout=stdout,
                     stderr=stderr,
                     start_new_session=True,
                     **creds,
                 )
         except (OSError, ValueError, KeyError) as e:
+            self._close_tty()
             self.error = str(e)
             self._died_early(f"spawn failed: {e}")
+
+    def attach(self, sink: Sink, rows: int, cols: int) -> None:
+        self._resize(rows, cols)
+        sink.send_raw(self.replay)
+        self.sinks.add(sink)
+
+    def detach(self, sink: Sink) -> None:
+        self.sinks.discard(sink)
+
+    def write_input(self, data: bytes) -> None:
+        """Type into the console; whatever does not fit in the pty is dropped."""
+        if self.master is None:
+            return
+        with contextlib.suppress(BlockingIOError):
+            os.write(self.master, data)
+
+    def _open_tty(self, files: contextlib.ExitStack) -> int:
+        """Open the pty and the stdout file; return the slave, closed by files."""
+        self.master, slave = os.openpty()
+        self._resize(24, 80)
+        files.callback(os.close, slave)
+        os.set_blocking(self.master, False)
+        self.sel.register(self.master, selectors.EVENT_READ, self._on_output)
+        if self.config.stdout:
+            self.out = os.open(self.config.stdout, APPEND, 0o666)
+        return slave
+
+    def _on_output(self, fd: int, _mask: int) -> None:
+        """One read per event, never until empty: a flood must not starve the loop."""
+        if fd != self.master:
+            return
+        try:
+            data = os.read(fd, 65536)
+        except BlockingIOError:
+            return
+        except OSError:
+            data = b""
+        if not data:
+            self._close_tty()
+            return
+        if self.out is not None:
+            os.write(self.out, data)
+        self.replay = (self.replay + data)[-4096:]
+        for sink in self.sinks.copy():
+            sink.send_raw(data)
+
+    def _close_tty(self) -> None:
+        """Close the pty, the stdout file and every sink; safe to call twice."""
+        if self.master is not None:
+            self.sel.unregister(self.master)
+            os.close(self.master)
+            self.master = None
+        if self.out is not None:
+            os.close(self.out)
+            self.out = None
+        for sink in self.sinks.copy():
+            sink.close()
+        self.sinks.clear()
+
+    def _resize(self, rows: int, cols: int) -> None:
+        size = struct.pack("HHHH", rows, cols, 0, 0)
+        fcntl.ioctl(self.master, termios.TIOCSWINSZ, size)
 
     def _credentials(self) -> dict:
         """Popen's user, group and extra_groups: setgroups needs root, even to stay yourself."""
