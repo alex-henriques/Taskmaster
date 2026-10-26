@@ -101,7 +101,7 @@ def _help(args: list[str]) -> Result:
 
 def _attach(name: str, backend: Backend) -> Result:
     try:
-        size = os.get_terminal_size()
+        size = os.get_terminal_size(0)  # stdin: the session puts it in raw mode
     except OSError:
         return Result("*** attach needs a terminal", ok=False)
     # a terminal that does not know its size reports 0x0

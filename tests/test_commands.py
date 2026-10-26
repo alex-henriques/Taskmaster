@@ -108,6 +108,19 @@ class ExecuteTest(unittest.TestCase):
         self.assertEqual(result, Result("*** attach needs a terminal", ok=False))
         self.assertEqual(self.backend.calls, [])
 
+    def test_attach_needs_stdin_to_be_the_terminal(self) -> None:
+        def size(fd: int = 1) -> os.terminal_size:
+            if fd == 0:
+                raise OSError("stdin is a pipe")
+            return os.terminal_size((80, 24))
+
+        with mock.patch(
+            "taskmaster.shell.commands.os.get_terminal_size", side_effect=size
+        ):
+            result = execute("attach nginx", self.backend)
+        self.assertEqual(result, Result("*** attach needs a terminal", ok=False))
+        self.assertEqual(self.backend.calls, [])
+
     def test_attach_usage(self) -> None:
         self.assertFalse(execute("attach", self.backend).ok)
         self.assertFalse(execute("attach a b", self.backend).ok)
