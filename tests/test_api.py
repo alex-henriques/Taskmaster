@@ -31,9 +31,9 @@ class ApiTest(unittest.TestCase):
             f.write(CONFIG)
         self.api = Api("c.yaml", interactive=True)
         log = logging.getLogger("taskmaster")
-        handler = log.handlers[-1]
-        self.addCleanup(handler.close)
-        self.addCleanup(log.removeHandler, handler)
+        for handler in log.handlers[:]:
+            self.addCleanup(handler.close)
+            self.addCleanup(log.removeHandler, handler)
 
     def state(self) -> str:
         return self.api.status(["sleeper"])["data"][0]["state"]
