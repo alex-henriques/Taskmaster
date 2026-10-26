@@ -9,6 +9,8 @@ import unittest
 
 from taskmaster.core.config import ProgramConfig
 from taskmaster.core.process import Process, State
+from taskmaster.core.supervisor import Supervisor
+from taskmaster.protocol import BAD_NAME, NOT_RUNNING, NOT_TTY
 
 LOG = logging.getLogger("test_tty")
 LOG.addHandler(logging.NullHandler())
@@ -229,3 +231,18 @@ class TtyTest(unittest.TestCase):
         self.drive(p, lambda p: p.state is State.RUNNING)
         p.stop()
         self.drive(p, lambda p: p.state is State.STOPPED, timeout=1)
+
+    def test_get_tty(self) -> None:
+        configs = {
+            "console": ProgramConfig("console", ("sleep", "30"), tty=True),
+            "plain": ProgramConfig("plain", ("sleep", "30")),
+        }
+        sup = Supervisor("unused.yaml", configs, LOG, self.sel)
+        cases = [("nope", BAD_NAME), ("plain", NOT_TTY), ("console", NOT_RUNNING)]
+        for name, code in cases:
+            with self.subTest(name):
+                reply, proc = sup.get_tty(name)
+                self.assertEqual((reply["error"], proc), (code, None))
+        sup.start(["console"])
+        self.addCleanup(self.reap, sup.procs["console"])
+        self.assertEqual(sup.get_tty("console"), ({"ok": True}, sup.procs["console"]))

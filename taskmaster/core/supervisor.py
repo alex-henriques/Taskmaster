@@ -8,7 +8,15 @@ from collections.abc import Callable
 from taskmaster.core.config import ConfigError, ProgramConfig, load
 from taskmaster.core.process import Process
 from taskmaster.core.reload import diff
-from taskmaster.protocol import BAD_CONFIG, BAD_NAME, BUSY, err, ok
+from taskmaster.protocol import (
+    BAD_CONFIG,
+    BAD_NAME,
+    BUSY,
+    NOT_RUNNING,
+    NOT_TTY,
+    err,
+    ok,
+)
 
 
 class Supervisor:
@@ -91,6 +99,17 @@ class Supervisor:
         for p in self.procs.values():
             p.stop()
         return ok(msg="shutting down")
+
+    def get_tty(self, name: str) -> tuple[dict, Process | None]:
+        """The process to attach to, or why there is none."""
+        p = self.procs.get(name)
+        if p is None:
+            return err(BAD_NAME, f"no such process: {name}"), None
+        if not p.config.tty:
+            return err(NOT_TTY, f"{name} does not run in a tty"), None
+        if p.master is None:
+            return err(NOT_RUNNING, f"{name} is not running"), None
+        return ok(), p
 
     def reap(self) -> None:
         for p in self.procs.values():
