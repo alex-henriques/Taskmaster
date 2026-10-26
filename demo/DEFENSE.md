@@ -264,7 +264,7 @@ status                     # wait ~5 s, then again; note the pid of stubborn
 
 ```bash
 # T2
-kill -9 <pid of stubborn>
+kill -9 $(pgrep -f stubborn.sh)
 ```
 
 ```
@@ -326,9 +326,10 @@ status                     # note the pids of forever_00 and stubborn
 **do** (T2), with the pids from `status`
 
 ```bash
-ls -l /proc/<pid of forever_00>/fd/1 /proc/<pid of forever_00>/fd/2
+PID=12345    # the pid of forever_00 from status
+ls -l /proc/$PID/fd/1 /proc/$PID/fd/2
 tail -3 /tmp/taskmaster-forever.out
-ls -l /proc/<pid of stubborn>/fd/1 /proc/<pid of stubborn>/fd/2
+ls -l /proc/$(pgrep -f stubborn.sh)/fd/1 /proc/$(pgrep -f stubborn.sh)/fd/2
 ```
 
 **show**
@@ -354,12 +355,13 @@ status                     # note the pids of whoami and forever_00
 
 ```bash
 head -3 /tmp/taskmaster-whoami.out
-grep Umask /proc/<pid of whoami>/status
-ls -l /proc/<pid of whoami>/cwd
-tr '\0' '\n' < /proc/<pid of whoami>/environ | grep -E 'GREETING|ANSWER'
+grep Umask /proc/$(pgrep -f whoami.sh)/status
+ls -l /proc/$(pgrep -f whoami.sh)/cwd
+tr '\0' '\n' < /proc/$(pgrep -f whoami.sh)/environ | grep -E 'GREETING|ANSWER'
+PID=12345    # the pid of forever_00 from status
 
-grep Umask /proc/<pid of forever_00>/status
-tr '\0' '\n' < /proc/<pid of forever_00>/environ | grep STARTED_BY
+grep Umask /proc/$PID/status
+tr '\0' '\n' < /proc/$PID/environ | grep STARTED_BY
 ```
 
 **show**
@@ -385,7 +387,7 @@ status                       # note the pid of forever_00
 
 ```bash
 # T2
-kill -9 <pid of forever_00>
+kill -9 12345 # the pid of forever_00 from status
 ```
 
 ```
@@ -639,7 +641,7 @@ status                     # note the pid of nobody
 ```bash
 head -1 /tmp/taskmaster-nobody.out
 ps -o user,pid,cmd -u nobody
-grep -E '^(Uid|Gid|Groups)' /proc/<pid of nobody>/status
+grep -E '^(Uid|Gid|Groups)' /proc/$(pgrep -u nobody -x sleep)/status
 ls -l /tmp/taskmaster-nobody.out
 ```
 
