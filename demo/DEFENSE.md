@@ -70,6 +70,9 @@ python3 --version
 **say** "Nothing crashes during this session, and the log has no traceback."
 At the very end we run `grep -ci traceback taskmaster.log` and expect `0`.
 
+**say**, about the norm line of the sheet: norminette only checks C. Ours is
+Python, linted with ruff in a pre-commit hook (`.githooks`).
+
 ## 2. Control shell
 
 **do** (T1)
@@ -105,7 +108,7 @@ stdin, which taskmaster sets to `/dev/null`, so it exits at once, before its
 **do** (T1) `status`
 
 **show** every program from `demo/v1.yaml` is listed:
-`crash echo exit_expected exit_unexpected flood forever_00 forever_01 stubborn whoami`.
+`crash echo exit_always exit_expected exit_unexpected flood forever_00 forever_01 stubborn whoami`.
 `forever` (`numprocs: 2`) is `forever_00` and `forever_01`. Programs with
 `autostart: true` are `forever` (RUNNING) and `crash`, which went BACKOFF for
 about 3 s right after startup and is FATAL by now. All the others are
@@ -249,6 +252,7 @@ Reset to v1 first: `cp demo/v1.yaml demo/live.yaml`, then `reload`.
 | Program | Config | What we expect |
 |---|---|---|
 | `forever` | `autorestart: always` | restarted if killed (§7) |
+| `exit_always` | `always`, `exitcodes: 0` | exits with 0 after 3 s: **expected**, and restarted anyway |
 | `stubborn` | `autorestart: never` | killed with `kill -9`: ends EXITED and stays there, not restarted |
 | `exit_expected` | `unexpected`, `exitcodes: [0, 2]` | exits with 2 after 3 s: **expected**, not restarted |
 | `exit_unexpected` | `unexpected`, `exitcodes: 0` | exits with 3 after 3 s: **unexpected**, restarted |
@@ -256,6 +260,7 @@ Reset to v1 first: `cp demo/v1.yaml demo/live.yaml`, then `reload`.
 **do** (T1)
 
 ```
+start exit_always
 start exit_expected
 start exit_unexpected
 start stubborn
@@ -273,12 +278,19 @@ status
 ```
 
 **show**
+- `exit_always` comes back with a new pid after every exit, although the log
+  says `exit 0, expected` (INFO): that is `always`. `stop exit_always` ends
+  the loop.
 - `exit_expected` ends EXITED (code 2) and stays there. The log line is INFO.
 - `exit_unexpected` is started again and again. The log shows a WARNING per
   unexpected exit with `exit 3, unexpected`, and a new pid each time.
 - `stop exit_unexpected` ends the loop.
 - `stubborn` ends EXITED, with `exit SIGKILL, unexpected` in the log, and **stays
   there**, because its `autorestart` is `never`.
+
+**say** "`forever` dies by a signal in §7, and a signal is never expected, so
+that alone can't tell `always` from `unexpected`. `exit_always` can: its exit
+is expected, and it still comes back."
 
 ### 6.3 `starttime` and `startretries`
 
@@ -407,6 +419,12 @@ has a WARNING for the unexpected exit (killed by signal 9) and a new spawn.
 
 **crash.sh ends FATAL**: shown in §6.3. Restate it: `crash` is FATAL after the
 configured number of attempts, and the log says it gave up.
+
+**say**, if the grader expects `exit_unexpected` to give up too: `startretries`
+only counts attempts that die before `starttime`. A program that stayed up for
+`starttime` has started, so a later crash is a new run and is restarted every
+time, as in supervisord. To end FATAL, a program has to fail while starting,
+like `crash`.
 
 ## 8. "Reasonable" abuse
 

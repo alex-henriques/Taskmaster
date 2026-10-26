@@ -30,6 +30,13 @@ programs:
     exitcodes: [0, 2]
     starttime: 1
 
+  exit_always:
+    cmd: "demo/programs/exitcode.sh 0"
+    autostart: false
+    autorestart: always
+    exitcodes: 0
+    starttime: 1
+
   flood:
     cmd: "demo/programs/flood.sh"
     autostart: false
