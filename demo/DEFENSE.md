@@ -745,6 +745,102 @@ fails. `Ctrl-C` shuts the daemon down because without a shell it's the only way 
 **say** "The client never blocks the core: the daemon writes to each client
 through a queue, and a client that disconnects only closes its own connection."
 
+### 10.4 Attach to a program's console
+
+`demo/bonus.yaml` has `echo`, a program with `tty: true`: it runs in a pty and
+answers every line with `echo: <line>`. Without sudo, `nobody` is FATAL there:
+ignore it. Nothing may be running first (`ls /tmp/taskmaster.sock` must fail).
+
+**do** (T1)
+
+```bash
+make daemon CONFIG=demo/bonus.yaml
+make ctl
+```
+
+```
+status
+attach echo
+```
+
+**show** `echo` and `forever` RUNNING, and the console starts with
+`echo.sh ready`.
+
+**do** (T1) type `hello` and Enter.
+
+**show** the terminal shows your line (the pty echoes it) and `echo: hello`.
+
+**do** (T1) `Ctrl-b`, then `d`. Then:
+
+```
+status echo
+attach echo
+```
+
+**show** the `taskmaster>` prompt is back at once and the terminal is normal.
+`echo` is still RUNNING with the same pid, and the second `attach` starts by
+showing `echo: hello` again: the daemon keeps the last 4 KiB of output.
+
+**say** "Detaching closes only our connection. The program never notices."
+
+**do** two terminals. (T1) stays attached. (T2): `make ctl`, `attach echo`, then
+type `from T2`.
+
+**show** both terminals show `echo: from T2`, and what T1 types shows in both.
+
+**do** (T1) `Ctrl-C`, while attached.
+
+**show**
+- In T1 and in T2: `^C`, then `*** lost the console: the program ended, or
+  taskmaster went down`, and the `taskmaster>` prompt.
+- The shell and taskmaster are still alive. `status echo` shows STARTING and then
+  RUNNING with a new pid, within about 2 seconds: `autorestart` did that.
+- T3: `echo: RUNNING -> EXITED (exit SIGINT, unexpected)`.
+
+**say** "In raw mode the terminal does not turn `Ctrl-C` into a signal. It is the
+byte 3, sent through the socket to the pty, and the program's own terminal turns
+it into `SIGINT` for the program. Taskmaster never sees it."
+
+**do** (T1)
+
+```
+attach forever
+attach nope
+```
+
+**show** `ERROR (not a tty program: forever does not run in a tty)` and
+`ERROR (no such process: nope)`. The shell stays in normal mode.
+
+**do** (T1) `attach echo`. (T2):
+
+```bash
+kill -9 $(pgrep -f 'demo/programs/echo.sh$')
+```
+
+**show** T1 prints the "lost the console" message and the prompt works: `status`
+answers. The terminal is not left in raw mode.
+
+**do** the in-process shell. (T1) `quit` the shell, then:
+
+```bash
+make ctl ARGS=shutdown
+make run CONFIG=demo/bonus.yaml
+```
+
+```
+attach echo
+```
+
+Type a line, then `Ctrl-b d`. `quit` at the end.
+
+**show** the same behaviour with no daemon at all, and `Ctrl-C` while attached
+does not stop taskmaster.
+
+**say** "`attach` opens a second connection that carries raw bytes after the
+reply. In the in-process shell, it is a `socketpair` that the core treats like any
+accepted connection. The core never blocks: a terminal that does not read, with
+more than 1 MiB waiting for it, is disconnected."
+
 ## 11. Final Cleanup
 
 ```bash
