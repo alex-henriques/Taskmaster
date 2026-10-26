@@ -81,6 +81,7 @@ error, and the message names the exact path, such as
 | `start name… \| all` | Start programs. |
 | `stop name… \| all` | Stop programs. |
 | `restart name… \| all` | Stop, then start again. |
+| `attach name` | Bonus. Connect the terminal to the console of a program with `tty: true`. `Ctrl-b` then `d` detaches and leaves the program running. |
 | `reload` | Read the config file again and apply the changes. |
 | `shutdown`, `quit` | Stop every program and leave. |
 | `help [command]` | List the commands, or show how to use one. |

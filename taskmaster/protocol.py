@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from typing import Protocol
+import socket
+from typing import NamedTuple, Protocol
 
 BAD_REQUEST = "BAD_REQUEST"
 UNKNOWN_COMMAND = "UNKNOWN_COMMAND"
@@ -42,6 +43,13 @@ class Sink(Protocol):
     def close(self) -> None: ...
 
 
+class Channel(NamedTuple):
+    """What Backend.attach returns on success: the console's byte stream."""
+
+    sock: socket.socket
+    pending: bytes  # output that came with the reply: show it first
+
+
 class Backend(Protocol):
     def status(self, names: list[str]) -> dict: ...
     def start(self, names: list[str]) -> dict: ...
@@ -49,6 +57,9 @@ class Backend(Protocol):
     def restart(self, names: list[str]) -> dict: ...
     def reload(self) -> dict: ...
     def shutdown(self) -> dict: ...
+    def attach(
+        self, name: str, rows: int, cols: int
+    ) -> tuple[dict, Channel | None]: ...
 
 
 def encode(msg: dict) -> bytes:

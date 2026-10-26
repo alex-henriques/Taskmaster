@@ -11,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 from taskmaster.api import Api
 from taskmaster.client import RemoteApi
-from taskmaster.protocol import BAD_NAME, BackendError
+from taskmaster.protocol import BAD_NAME, NOT_TTY, BackendError
 from taskmaster.server import Server
 
 CONFIG = """\
@@ -19,6 +19,10 @@ programs:
   sleeper:
     cmd: "sleep 30"
     autostart: false
+    starttime: 0.2
+  catter:
+    cmd: "cat"
+    tty: true
     starttime: 0.2
 """
 
@@ -86,6 +90,70 @@ class RemoteApiTest(unittest.TestCase):
         self.assertEqual(self.run_with(body), 0)
         self.assertTrue(replies[0]["ok"])
         self.assertFalse(os.path.exists(self.path))
+
+    def console(self, channel, want: bytes, timeout: float = 5.0) -> bytes:
+        """Read the console until `want` shows up."""
+        channel.sock.settimeout(timeout)
+        seen = channel.pending
+        while want not in seen:
+            seen += channel.sock.recv(4096)
+        return seen
+
+    def test_attach_through_the_socket(self) -> None:
+        seen = {}
+
+        def body(remote: RemoteApi) -> None:
+            reply, channel = remote.attach("catter", 24, 80)
+            seen["reply"] = reply
+            channel.sock.sendall(b"hello\n")
+            seen["echo"] = self.console(channel, b"hello\r\nhello")
+            channel.sock.close()
+            seen["plain"] = remote.attach("sleeper", 24, 80)
+            seen["bad"] = remote.attach("nope", 24, 80)
+            seen["still json"] = remote.status(["sleeper"])
+
+        self.assertEqual(self.run_with(body), 0)
+        self.assertTrue(seen["reply"]["ok"])
+        self.assertIn(b"hello\r\nhello", seen["echo"])
+        self.assertEqual(seen["plain"][1], None)
+        self.assertEqual(seen["plain"][0]["error"], NOT_TTY)
+        self.assertEqual(seen["bad"][0]["error"], BAD_NAME)
+        self.assertTrue(seen["still json"]["ok"])
+
+    def test_attach_in_process(self) -> None:
+        seen = {}
+
+        def body(remote: RemoteApi) -> None:
+            reply, channel = self.api.attach("catter", 24, 80)
+            seen["reply"] = reply
+            channel.sock.sendall(b"hi\n")
+            seen["echo"] = self.console(channel, b"hi\r\nhi")
+            seen["plain"] = self.api.attach("sleeper", 24, 80)
+            seen["bad"] = self.api.attach("nope", 24, 80)
+            channel.sock.close()
+
+        self.assertEqual(self.run_with(body), 0)
+        self.assertTrue(seen["reply"]["ok"])
+        self.assertIn(b"hi\r\nhi", seen["echo"])
+        self.assertEqual(seen["plain"][1], None)
+        self.assertEqual(seen["plain"][0]["error"], NOT_TTY)
+        self.assertEqual(seen["bad"][0]["error"], BAD_NAME)
+
+    def test_the_program_dying_ends_the_console(self) -> None:
+        seen = {}
+
+        def body(remote: RemoteApi) -> None:
+            _, channel = remote.attach("catter", 24, 80)
+            remote.stop(["catter"])
+            channel.sock.settimeout(5)
+            data = b"x"
+            while data:
+                data = channel.sock.recv(4096)
+            channel.sock.close()
+            seen["eof"] = True
+
+        self.assertEqual(self.run_with(body), 0)
+        self.assertTrue(seen["eof"])
 
     def test_no_daemon(self) -> None:
         with self.assertRaisesRegex(BackendError, "taskmasterd is not running"):

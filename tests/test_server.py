@@ -11,12 +11,34 @@ from types import SimpleNamespace
 
 from taskmaster.protocol import (
     BAD_REQUEST,
+    NOT_TTY,
     UNKNOWN_COMMAND,
     LineBuffer,
     encode,
+    err,
     ok,
 )
 from taskmaster.server import Server
+
+
+class FakeProcess:
+    """What the server needs of a Process: attach, detach and write_input."""
+
+    def __init__(self) -> None:
+        self.sinks: list = []
+        self.typed = b""
+        self.detached = 0
+
+    def attach(self, sink, rows: int, cols: int) -> None:
+        self.size = (rows, cols)
+        sink.send_raw(b"replay")
+        self.sinks.append(sink)
+
+    def detach(self, sink) -> None:
+        self.detached += 1
+
+    def write_input(self, data: bytes) -> None:
+        self.typed += data
 
 
 class FakeApi:
@@ -25,10 +47,17 @@ class FakeApi:
     def __init__(self) -> None:
         self.loop = SimpleNamespace(sel=selectors.DefaultSelector(), log=None)
         self.calls: list[tuple] = []
+        self.process = FakeProcess()
         for name in ("status", "start", "stop", "restart"):
             setattr(self, name, self._named(name))
         for name in ("reload", "shutdown"):
             setattr(self, name, self._bare(name))
+
+    def get_tty(self, name: str):
+        self.calls.append(("get_tty", name))
+        if name == "plain":
+            return err(NOT_TTY, "plain does not run in a tty"), None
+        return ok(), self.process
 
     def _named(self, name: str):
         def method(names: list[str]) -> dict:
@@ -171,6 +200,79 @@ class ServerTest(unittest.TestCase):
         self.assertEqual(self.replies(other, lines, 1), [ok(msg="stop")])
         other.sendall(encode({"cmd": "restart", "args": ["x"]}))
         self.assertEqual(self.replies(other, lines, 1), [ok(msg="restart")])
+
+    def attach_request(self, name: str = "t", rows: int = 24, cols: int = 80) -> bytes:
+        return encode({"cmd": "attach", "args": [name], "rows": rows, "cols": cols})
+
+    def drain(self, client: socket.socket, lines: LineBuffer) -> bool:
+        try:
+            lines.buf += client.recv(4096)
+        except BlockingIOError:
+            pass
+        return lines.buf == b"replay"
+
+    def test_attach_replies_then_goes_raw(self) -> None:
+        self.serve()
+        client, lines = self.connect()
+        client.sendall(self.attach_request(rows=40, cols=120))
+        self.assertEqual(self.replies(client, lines, 1), [ok()])
+        self.pump(lambda: self.api.process.sinks)
+        self.assertEqual(self.api.process.size, (40, 120))
+        self.pump(lambda: self.drain(client, lines))
+        self.assertEqual(lines.buf, b"replay")
+        client.sendall(b"hello")
+        self.pump(lambda: self.api.process.typed == b"hello")
+
+    def test_input_right_behind_the_request_is_not_json(self) -> None:
+        self.serve()
+        client, lines = self.connect()
+        client.sendall(self.attach_request() + b"typed fast")
+        self.assertEqual(self.replies(client, lines, 1), [ok()])
+        self.pump(lambda: self.api.process.typed == b"typed fast")
+
+    def test_closing_a_raw_connection_detaches(self) -> None:
+        self.serve()
+        client, lines = self.connect()
+        client.sendall(self.attach_request())
+        self.replies(client, lines, 1)
+        client.close()
+        self.pump(lambda: self.api.process.detached == 1)
+
+    def test_not_a_tty_is_a_reply_and_the_connection_stays_json(self) -> None:
+        self.serve()
+        client, lines = self.connect()
+        client.sendall(self.attach_request("plain"))
+        self.assertEqual(self.replies(client, lines, 1)[0]["error"], NOT_TTY)
+        client.sendall(encode({"cmd": "status", "args": []}))
+        self.assertEqual(self.replies(client, lines, 1), [ok(msg="status")])
+        self.assertEqual(self.api.process.sinks, [])
+
+    def test_bad_attach_requests(self) -> None:
+        self.serve()
+        client, lines = self.connect()
+        for msg in (
+            {"cmd": "attach", "args": []},
+            {"cmd": "attach", "args": ["a", "b"], "rows": 1, "cols": 1},
+            {"cmd": "attach", "args": ["a"], "rows": 24},
+            {"cmd": "attach", "args": ["a"], "rows": -1, "cols": 80},
+            {"cmd": "attach", "args": ["a"], "rows": "24", "cols": 80},
+            {"cmd": "attach", "args": ["a"], "rows": True, "cols": 80},
+            {"cmd": "attach", "args": ["a"], "rows": 24, "cols": 70000},
+        ):
+            client.sendall(encode(msg))
+            self.assertEqual(self.replies(client, lines, 1)[-1]["error"], BAD_REQUEST)
+        self.assertEqual(self.api.process.sinks, [])
+
+    def test_more_than_1_mib_queued_closes_and_detaches(self) -> None:
+        self.serve()
+        client, lines = self.connect()
+        client.sendall(self.attach_request())
+        self.replies(client, lines, 1)
+        self.pump(lambda: self.api.process.sinks)
+        conn = self.api.process.sinks[0]
+        conn.send_raw(b"x" * ((1 << 20) + 1))
+        self.assertTrue(conn.closed)
+        self.assertEqual(self.api.process.detached, 1)
 
 
 if __name__ == "__main__":

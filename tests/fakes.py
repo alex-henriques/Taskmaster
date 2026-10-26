@@ -3,7 +3,16 @@ from __future__ import annotations
 import re
 import time
 
-from taskmaster.protocol import ALREADY_STARTED, BAD_NAME, BUSY, NOT_RUNNING, err, ok
+from taskmaster.protocol import (
+    ALREADY_STARTED,
+    BAD_NAME,
+    BUSY,
+    NOT_RUNNING,
+    NOT_TTY,
+    Channel,
+    err,
+    ok,
+)
 
 
 def _matches(name: str, row: dict) -> bool:
@@ -117,3 +126,9 @@ class FakeBackend:
     def shutdown(self) -> dict:
         self.calls.append(("shutdown", ()))
         return ok(msg="shutting down")
+
+    def attach(self, name: str, rows: int, cols: int) -> tuple[dict, Channel | None]:
+        self.calls.append(("attach", name, rows, cols))
+        if not self._select([name]):
+            return err(BAD_NAME, f"no such process: {name}"), None
+        return err(NOT_TTY, f"{name} does not run in a tty"), None
