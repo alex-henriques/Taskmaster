@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 import shlex
 import time
 from dataclasses import dataclass
 
 from taskmaster.protocol import Backend
-from taskmaster.shell import render
+from taskmaster.shell import attach, render
 
 
 @dataclass(frozen=True)
@@ -63,6 +64,14 @@ COMMANDS: dict[str, Command] = {
             0,
             False,
         ),
+        Command(
+            "attach",
+            "attach <name>",
+            "Connect to the console of a tty program. Ctrl-b d detaches.",
+            1,
+            1,
+            True,
+        ),
         Command("shutdown", "shutdown", "Stop every process and exit.", 0, 0, False),
         Command(
             "help",
@@ -90,6 +99,19 @@ def _help(args: list[str]) -> Result:
     return Result(f"{cmd.usage}  {cmd.help}")
 
 
+def _attach(name: str, backend: Backend) -> Result:
+    try:
+        size = os.get_terminal_size()
+    except OSError:
+        return Result("*** attach needs a terminal", ok=False)
+    # a terminal that does not know its size reports 0x0
+    rows, cols = size.lines or 24, size.columns or 80
+    reply, channel = backend.attach(name, rows, cols)
+    if channel is None:
+        return Result(render.results(reply), ok=False)
+    return Result(attach.session(channel))
+
+
 def execute(line: str, backend: Backend) -> Result:
     """Parse one line, run it against the backend, and render the reply."""
     try:
@@ -110,6 +132,8 @@ def execute(line: str, backend: Backend) -> Result:
         return _help(args)
     if cmd.name == "quit":
         return Result("", quit=True)
+    if cmd.name == "attach":
+        return _attach(args[0], backend)
     method = getattr(backend, cmd.name)
     reply = method(args) if cmd.takes_names else method()
     if cmd.name == "status" and reply["ok"]:

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import os
+import socket
 import unittest
+from unittest import mock
 
-from taskmaster.protocol import Backend, BackendError
+from taskmaster.protocol import Backend, BackendError, Channel, ok
 from taskmaster.shell.commands import COMMANDS, Result, execute
 from tests.fakes import FakeBackend
 
@@ -76,7 +79,6 @@ class ExecuteTest(unittest.TestCase):
         for cmd in COMMANDS.values():
             self.assertIn(cmd.usage, result.text)
             self.assertIn(cmd.help, result.text)
-        self.assertNotIn("attach", result.text)
         self.assertEqual(self.backend.calls, [])
 
     def test_help_one_command(self) -> None:
@@ -97,6 +99,68 @@ class ExecuteTest(unittest.TestCase):
         self.assertFalse(result.ok)
         self.assertTrue(result.text)
         self.assertEqual(self.backend.calls, [])
+
+    def test_attach_needs_a_terminal(self) -> None:
+        with mock.patch(
+            "taskmaster.shell.commands.os.get_terminal_size", side_effect=OSError
+        ):
+            result = execute("attach nginx", self.backend)
+        self.assertEqual(result, Result("*** attach needs a terminal", ok=False))
+        self.assertEqual(self.backend.calls, [])
+
+    def test_attach_usage(self) -> None:
+        self.assertFalse(execute("attach", self.backend).ok)
+        self.assertFalse(execute("attach a b", self.backend).ok)
+        self.assertEqual(self.backend.calls, [])
+
+    def test_attach_refused_is_rendered(self) -> None:
+        size = os.terminal_size((120, 40))
+        with mock.patch(
+            "taskmaster.shell.commands.os.get_terminal_size", return_value=size
+        ):
+            refused = execute("attach nginx", self.backend)
+            unknown = execute("attach nope", self.backend)
+        self.assertEqual(
+            refused,
+            Result("ERROR (not a tty program: nginx does not run in a tty)", ok=False),
+        )
+        self.assertFalse(unknown.ok)
+        self.assertIn("no such process", unknown.text)
+        self.assertEqual(
+            self.backend.calls,
+            [("attach", "nginx", 40, 120), ("attach", "nope", 40, 120)],
+        )
+
+    def test_attach_with_a_terminal_that_has_no_size(self) -> None:
+        size = os.terminal_size((0, 0))
+        with mock.patch(
+            "taskmaster.shell.commands.os.get_terminal_size", return_value=size
+        ):
+            execute("attach nginx", self.backend)
+        self.assertEqual(self.backend.calls, [("attach", "nginx", 24, 80)])
+
+    def test_attach_runs_the_session(self) -> None:
+        mine, theirs = socket.socketpair()
+        self.addCleanup(mine.close)
+        self.addCleanup(theirs.close)
+        channel = Channel(mine, b"")
+
+        class Attached(FakeBackend):
+            def attach(self, name, rows, cols):
+                return ok(), channel
+
+        size = os.terminal_size((80, 24))
+        with (
+            mock.patch(
+                "taskmaster.shell.commands.os.get_terminal_size", return_value=size
+            ),
+            mock.patch(
+                "taskmaster.shell.commands.attach.session", return_value=""
+            ) as run,
+        ):
+            result = execute("attach nginx", Attached())
+        self.assertEqual(result, Result(""))
+        run.assert_called_once_with(channel)
 
     def test_table_matches_backend(self) -> None:
         # every command that is not shell only is a Backend method
