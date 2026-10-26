@@ -567,7 +567,7 @@ Delete `demo/ghost.yaml` afterwards. The main taskmaster can be started again wi
 **show** every config option is documented, with its default and an example:
 `cmd`, `numprocs`, `autostart`, `autorestart`, `exitcodes`, `startretries`,
 `starttime`, `stopsignal`, `stoptime`, `stdout`, `stderr`, `env`, `workingdir`,
-`umask`, and the bonus `user`. Also the signals (`SIGHUP` reloads, `SIGTERM` and `SIGQUIT` shut down).
+`umask`, and the bonus `user` and `tty`. Also the signals (`SIGHUP` reloads, `SIGTERM` and `SIGQUIT` shut down).
 
 ## 10. Bonus
 
