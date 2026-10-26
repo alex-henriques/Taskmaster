@@ -4,6 +4,7 @@ import contextlib
 import enum
 import logging
 import os
+import pwd
 import selectors
 import signal
 import subprocess
@@ -138,6 +139,7 @@ class Process:
         self._set(State.STARTING, f"spawn, attempt {self.attempts}")
         self.error = None
         try:
+            creds = self._credentials()
             with contextlib.ExitStack() as files:
                 stdout = stderr = subprocess.DEVNULL
                 if cfg.stdout:
@@ -153,10 +155,24 @@ class Process:
                     stdout=stdout,
                     stderr=stderr,
                     start_new_session=True,
+                    **creds,
                 )
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, KeyError) as e:
             self.error = str(e)
             self._died_early(f"spawn failed: {e}")
+
+    def _credentials(self) -> dict:
+        """Popen's user, group and extra_groups: setgroups needs root, even to stay yourself."""
+        name = self.config.user
+        if name is None:
+            return {}
+        pw = pwd.getpwnam(name)
+        if os.geteuid() == 0:
+            groups = os.getgrouplist(name, pw.pw_gid)
+            return {"user": pw.pw_uid, "group": pw.pw_gid, "extra_groups": groups}
+        if pw.pw_uid == os.geteuid():
+            return {}
+        raise PermissionError("user switching needs root")
 
     def _died_early(self, reason: str) -> None:
         if self.attempts > self.config.startretries:

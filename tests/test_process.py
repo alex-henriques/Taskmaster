@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import pwd
 import selectors
 import signal
 import subprocess
@@ -174,3 +175,35 @@ class ProcessTest(unittest.TestCase):
             self.assertEqual(
                 f.read().split(), ["0027", os.path.realpath(self.dir), "42"]
             )
+
+    @unittest.skipIf(os.geteuid() == 0, "root may switch users")
+    def test_user_needs_root(self) -> None:
+        out = os.path.join(self.dir, "out")
+        p = self.make("true", user="root", startretries=0, stdout=out)
+        p.start()
+        self.assertIs(p.state, State.FATAL)
+        self.assertEqual(p.info()["error"], "user switching needs root")
+        self.assertFalse(os.path.exists(out))
+
+    def test_user_self(self) -> None:
+        out = os.path.join(self.dir, "out")
+        name = pwd.getpwuid(os.getuid()).pw_name
+        p = self.make("id", "-u", user=name, stdout=out)
+        p.start()
+        self.drive(p, lambda p: not p.is_alive())
+        with open(out) as f:
+            self.assertEqual(f.read().strip(), str(os.getuid()))
+
+    @unittest.skipUnless(os.geteuid() == 0, "needs root")
+    def test_user_as_root(self) -> None:
+        out = os.path.join(self.dir, "out")
+        p = self.make("sh", "-c", "id -u; id -g; id -G", user="nobody", stdout=out)
+        p.start()
+        self.drive(p, lambda p: not p.is_alive())
+        with open(out) as f:
+            self.assertEqual(f.read().split(), ["65534", "65534", "65534"])
+
+    def test_user_gone_before_spawn(self) -> None:
+        p = self.make("true", user="nosuchuser", startretries=0)
+        p.start()
+        self.assertIs(p.state, State.FATAL)
