@@ -111,6 +111,8 @@ git fetch origin && git merge origin/main     # both of us, each on our own bran
 
 Before any bonus PR (#14 to #19) is merged, `make test` and the whole of `demo/DEFENSE.md` must pass again on the VM.
 
+Tests that need root skip themselves under `make test`. Run them too, with `sudo .venv/bin/python3 -B -m unittest tests.test_process -v`. The `-B` keeps root-owned `.pyc` files out of the repo.
+
 ## Looking at supervised processes
 
 ```bash
