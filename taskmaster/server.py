@@ -188,7 +188,12 @@ class Connection:
         if len(args) != 1 or not _size(msg.get("rows")) or not _size(msg.get("cols")):
             self.send(err(BAD_REQUEST, "attach takes one name, rows and cols"))
             return
-        reply, process = self.api.get_tty(args[0])
+        try:
+            reply, process = self.api.get_tty(args[0])
+        except Exception as e:
+            # without a reply the client would wait forever: it ignores Ctrl-C meanwhile
+            self.api.loop.log.exception("error in attach")
+            reply, process = err(INTERNAL, str(e)), None
         self.send(reply)  # queued before anything the process prints
         if process is not None:
             self.start_attach(process, msg["rows"], msg["cols"])

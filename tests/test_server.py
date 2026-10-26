@@ -8,9 +8,11 @@ import tempfile
 import time
 import unittest
 from types import SimpleNamespace
+from unittest import mock
 
 from taskmaster.protocol import (
     BAD_REQUEST,
+    INTERNAL,
     NOT_TTY,
     UNKNOWN_COMMAND,
     LineBuffer,
@@ -246,6 +248,14 @@ class ServerTest(unittest.TestCase):
         client.sendall(encode({"cmd": "status", "args": []}))
         self.assertEqual(self.replies(client, lines, 1), [ok(msg="status")])
         self.assertEqual(self.api.process.sinks, [])
+
+    def test_an_error_in_get_tty_still_gets_a_reply(self) -> None:
+        self.api.loop.log = mock.Mock()
+        self.api.get_tty = mock.Mock(side_effect=RuntimeError("boom"))
+        self.serve()
+        client, lines = self.connect()
+        client.sendall(self.attach_request())
+        self.assertEqual(self.replies(client, lines, 1), [err(INTERNAL, "boom")])
 
     def test_bad_attach_requests(self) -> None:
         self.serve()
