@@ -13,6 +13,7 @@ class Api:
     def __init__(self, config_path: str, *, interactive: bool) -> None:
         configs = config.load(config_path)
         log = logger.setup(os.path.abspath("taskmaster.log"))
+        logger.add_syslog(log)
         self.loop = Loop(log, interactive=interactive)
         self.sup = Supervisor(config_path, configs, log, self.loop.sel)
 
